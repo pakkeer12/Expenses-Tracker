@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { ExpenseList } from "@/components/ExpenseList";
 import { ExpenseDialog } from "@/components/ExpenseDialog";
 import { BankStatementUpload } from "@/components/BankStatementUpload";
@@ -13,57 +13,53 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Download, Upload } from "lucide-react";
-
-//todo: remove mock functionality
-const mockExpenses = [
-  {
-    id: "1",
-    title: "Grocery Shopping",
-    amount: 125.50,
-    category: "Food",
-    date: "2025-10-04",
-    notes: "Weekly groceries",
-  },
-  {
-    id: "2",
-    title: "Uber to Work",
-    amount: 15.00,
-    category: "Transport",
-    date: "2025-10-03",
-  },
-  {
-    id: "3",
-    title: "Netflix Subscription",
-    amount: 15.99,
-    category: "Entertainment",
-    date: "2025-10-01",
-  },
-  {
-    id: "4",
-    title: "New Shoes",
-    amount: 89.99,
-    category: "Shopping",
-    date: "2025-09-30",
-  },
-  {
-    id: "5",
-    title: "Electricity Bill",
-    amount: 120.00,
-    category: "Bills",
-    date: "2025-09-28",
-  },
-];
+import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from "@/hooks/use-expenses";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Expenses() {
+  const { data: expenses = [], isLoading } = useExpenses();
+  const createExpense = useCreateExpense();
+  const updateExpense = useUpdateExpense();
+  const deleteExpense = useDeleteExpense();
+  const { toast } = useToast();
+  
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
   const [importedTransactions, setImportedTransactions] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [editingExpense, setEditingExpense] = useState<any>(null);
+
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter((expense) => {
+      const matchesSearch = searchQuery === "" || 
+        expense.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (expense.notes && expense.notes.toLowerCase().includes(searchQuery.toLowerCase()));
+      const matchesCategory = categoryFilter === "all" || expense.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [expenses, searchQuery, categoryFilter]);
 
   const handleExportCSV = () => {
-    console.log("Exporting expenses to CSV");
+    const csvContent = [
+      ["Title", "Amount", "Category", "Date", "Notes"].join(","),
+      ...expenses.map(exp => [
+        exp.title,
+        exp.amount,
+        exp.category,
+        exp.date,
+        exp.notes || ""
+      ].join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `expenses-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleUploadComplete = (transactions: any[]) => {
@@ -72,8 +68,83 @@ export default function Expenses() {
     setReviewDialogOpen(true);
   };
 
-  const handleSaveImportedTransactions = (transactions: any[]) => {
-    console.log("Saving imported transactions:", transactions);
+  const handleSaveImportedTransactions = async (transactions: any[]) => {
+    for (const transaction of transactions) {
+      await createExpense.mutateAsync({
+        title: transaction.description || "Imported expense",
+        amount: transaction.amount.toString(),
+        category: transaction.category || "Other",
+        date: transaction.date,
+        notes: transaction.notes,
+      });
+    }
+    setReviewDialogOpen(false);
+    toast({
+      title: "Success",
+      description: `Imported ${transactions.length} expenses`,
+    });
+  };
+
+  const handleSaveExpense = async (data: any) => {
+    try {
+      if (editingExpense) {
+        await updateExpense.mutateAsync({
+          id: editingExpense.id,
+          data: {
+            title: data.title,
+            amount: data.amount,
+            category: data.category,
+            date: data.date,
+            notes: data.notes,
+          },
+        });
+        toast({
+          title: "Success",
+          description: "Expense updated successfully",
+        });
+      } else {
+        await createExpense.mutateAsync({
+          title: data.title,
+          amount: data.amount,
+          category: data.category,
+          date: data.date,
+          notes: data.notes,
+        });
+        toast({
+          title: "Success",
+          description: "Expense created successfully",
+        });
+      }
+      setExpenseDialogOpen(false);
+      setEditingExpense(null);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditExpense = (expense: any) => {
+    setEditingExpense(expense);
+    setExpenseDialogOpen(true);
+  };
+
+  const handleDeleteExpense = async (id: string) => {
+    try {
+      await deleteExpense.mutateAsync(id);
+      toast({
+        title: "Success",
+        description: "Expense deleted successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -136,16 +207,33 @@ export default function Expenses() {
         </Select>
       </div>
 
-      <ExpenseList
-        expenses={mockExpenses}
-        onEdit={(expense) => console.log("Edit expense:", expense)}
-        onDelete={(id) => console.log("Delete expense:", id)}
-      />
+      {isLoading ? (
+        <div className="text-center py-8">Loading expenses...</div>
+      ) : filteredExpenses.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          {searchQuery || categoryFilter !== "all" ? "No expenses match your filters" : "No expenses yet. Add your first expense!"}
+        </div>
+      ) : (
+        <ExpenseList
+          expenses={filteredExpenses.map(exp => ({
+            ...exp,
+            amount: parseFloat(exp.amount),
+            date: exp.date.toString(),
+            notes: exp.notes || undefined,
+          }))}
+          onEdit={handleEditExpense}
+          onDelete={handleDeleteExpense}
+        />
+      )}
 
       <ExpenseDialog
         open={expenseDialogOpen}
-        onOpenChange={setExpenseDialogOpen}
-        onSave={(expense) => console.log("Save expense:", expense)}
+        onOpenChange={(open) => {
+          setExpenseDialogOpen(open);
+          if (!open) setEditingExpense(null);
+        }}
+        onSave={handleSaveExpense}
+        expense={editingExpense}
       />
 
       <BankStatementUpload
