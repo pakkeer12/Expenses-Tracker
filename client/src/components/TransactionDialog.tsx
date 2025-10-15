@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -37,17 +37,39 @@ export function TransactionDialog({
   onSave,
   transaction,
 }: TransactionDialogProps) {
-  const [formData, setFormData] = useState(
-    transaction || {
-      date: new Date().toISOString().split("T")[0],
-      type: "income",
-      amount: "",
-      category: "",
-      description: "",
-      paymentMethod: "",
-      customFields: {},
+  const [formData, setFormData] = useState({
+    date: new Date().toISOString().split("T")[0],
+    type: "income",
+    amount: "",
+    category: "",
+    description: "",
+    paymentMethod: "",
+    customFields: {} as Record<string, any>,
+  });
+
+  useEffect(() => {
+    if (transaction) {
+      setFormData({
+        date: transaction.date,
+        type: transaction.type,
+        amount: transaction.amount.toString(),
+        category: transaction.category,
+        description: transaction.description,
+        paymentMethod: transaction.paymentMethod,
+        customFields: transaction.customFields || {},
+      });
+    } else {
+      setFormData({
+        date: new Date().toISOString().split("T")[0],
+        type: "income",
+        amount: "",
+        category: "",
+        description: "",
+        paymentMethod: "",
+        customFields: {},
+      });
     }
-  );
+  }, [transaction, open]);
 
   const handleSave = () => {
     onSave?.(formData);

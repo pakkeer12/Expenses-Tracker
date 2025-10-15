@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,12 +27,24 @@ interface BudgetDialogProps {
 const categories = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Other"];
 
 export function BudgetDialog({ open, onOpenChange, onSave, budget }: BudgetDialogProps) {
-  const [formData, setFormData] = useState(
-    budget || {
-      category: "",
-      limit: "",
+  const [formData, setFormData] = useState({
+    category: "",
+    limit: "",
+  });
+
+  useEffect(() => {
+    if (budget) {
+      setFormData({
+        category: budget.category,
+        limit: budget.limit.toString(),
+      });
+    } else {
+      setFormData({
+        category: "",
+        limit: "",
+      });
     }
-  );
+  }, [budget, open]);
 
   const handleSave = () => {
     onSave?.(formData);

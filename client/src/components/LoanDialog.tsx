@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -27,17 +27,39 @@ interface LoanDialogProps {
 const loanTypes = ["personal", "business", "auto", "mortgage"];
 
 export function LoanDialog({ open, onOpenChange, onSave, loan }: LoanDialogProps) {
-  const [formData, setFormData] = useState(
-    loan || {
-      name: "",
-      totalAmount: "",
-      paidAmount: "",
-      interestRate: "",
-      dueDate: "",
-      lender: "",
-      type: "",
+  const [formData, setFormData] = useState({
+    name: "",
+    totalAmount: "",
+    paidAmount: "0",
+    interestRate: "",
+    dueDate: "",
+    lender: "",
+    type: "",
+  });
+
+  useEffect(() => {
+    if (loan) {
+      setFormData({
+        name: loan.name,
+        totalAmount: loan.totalAmount.toString(),
+        paidAmount: loan.paidAmount.toString(),
+        interestRate: loan.interestRate.toString(),
+        dueDate: loan.dueDate,
+        lender: loan.lender,
+        type: loan.type,
+      });
+    } else {
+      setFormData({
+        name: "",
+        totalAmount: "",
+        paidAmount: "0",
+        interestRate: "",
+        dueDate: "",
+        lender: "",
+        type: "",
+      });
     }
-  );
+  }, [loan, open]);
 
   const handleSave = () => {
     onSave?.(formData);

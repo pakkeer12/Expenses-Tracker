@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Dialog,
   DialogContent,
@@ -11,30 +13,60 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
 
 interface PaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   loan: any;
-  onSave?: (payment: any) => void;
+  onSave?: () => void;
 }
 
 export function PaymentDialog({ open, onOpenChange, loan, onSave }: PaymentDialogProps) {
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
     amount: "",
     date: new Date().toISOString().split("T")[0],
     notes: "",
   });
 
+  useEffect(() => {
+    if (open) {
+      setFormData({
+        amount: "",
+        date: new Date().toISOString().split("T")[0],
+        notes: "",
+      });
+    }
+  }, [open]);
+
+  const createPaymentMutation = useMutation({
+    mutationFn: (payment: any) => 
+      apiRequest(`/api/loans/${loan?.id}/payments`, "POST", payment),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/loans"] });
+      toast({
+        title: "Payment added",
+        description: "Your payment has been recorded successfully.",
+      });
+      onSave?.();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add payment",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleSave = () => {
-    onSave?.({ ...formData, loanId: loan?.id });
-    onOpenChange(false);
-    setFormData({ amount: "", date: new Date().toISOString().split("T")[0], notes: "" });
+    createPaymentMutation.mutate(formData);
   };
 
   if (!loan) return null;
 
-  const remaining = loan.totalAmount - loan.paidAmount;
+  const remaining = parseFloat(loan.totalAmount) - parseFloat(loan.paidAmount);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -91,8 +123,12 @@ export function PaymentDialog({ open, onOpenChange, loan, onSave }: PaymentDialo
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel-payment">
             Cancel
           </Button>
-          <Button onClick={handleSave} data-testid="button-save-payment">
-            Add Payment
+          <Button 
+            onClick={handleSave} 
+            disabled={createPaymentMutation.isPending}
+            data-testid="button-save-payment"
+          >
+            {createPaymentMutation.isPending ? "Adding..." : "Add Payment"}
           </Button>
         </DialogFooter>
       </DialogContent>

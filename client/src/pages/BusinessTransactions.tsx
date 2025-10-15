@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,87 +18,111 @@ import { CustomFieldDialog } from "@/components/CustomFieldDialog";
 import { ReportDialog } from "@/components/ReportDialog";
 import { BankStatementUpload } from "@/components/BankStatementUpload";
 import { TransactionReviewDialog } from "@/components/TransactionReviewDialog";
-
-interface CustomField {
-  id: string;
-  name: string;
-  type: "text" | "number" | "date" | "select";
-  options?: string[];
-}
-
-interface Transaction {
-  id: string;
-  date: string;
-  type: "income" | "expense";
-  amount: number;
-  category: string;
-  description: string;
-  paymentMethod: string;
-  customFields?: Record<string, any>;
-}
-
-//todo: remove mock functionality
-const mockTransactions: Transaction[] = [
-  {
-    id: "1",
-    date: "2025-10-05",
-    type: "income",
-    amount: 1500.00,
-    category: "Sales",
-    description: "Product sale to customer A",
-    paymentMethod: "Bank Transfer",
-    customFields: { "Invoice Number": "INV-001", "Customer": "John Doe" },
-  },
-  {
-    id: "2",
-    date: "2025-10-04",
-    type: "expense",
-    amount: 250.00,
-    category: "Supplies",
-    description: "Office supplies purchase",
-    paymentMethod: "Cash",
-    customFields: { "Vendor": "Office Depot" },
-  },
-  {
-    id: "3",
-    date: "2025-10-03",
-    type: "income",
-    amount: 3200.00,
-    category: "Services",
-    description: "Consulting service payment",
-    paymentMethod: "Credit Card",
-    customFields: { "Invoice Number": "INV-002", "Project": "Website Design" },
-  },
-];
-
-const mockCustomFields: CustomField[] = [
-  { id: "1", name: "Invoice Number", type: "text" },
-  { id: "2", name: "Customer", type: "text" },
-  { id: "3", name: "Vendor", type: "text" },
-  { id: "4", name: "Project", type: "text" },
-];
+import { Skeleton } from "@/components/ui/skeleton";
+import type { BusinessTransaction, CustomField } from "@shared/schema";
+import { useToast } from "@/hooks/use-toast";
 
 export default function BusinessTransactions() {
-  const [transactions, setTransactions] = useState(mockTransactions);
-  const [customFields, setCustomFields] = useState(mockCustomFields);
   const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
   const [customFieldDialogOpen, setCustomFieldDialogOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<BusinessTransaction | null>(null);
   const [importedTransactions, setImportedTransactions] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const { toast } = useToast();
 
-  const totalIncome = transactions
+  const { data: transactions = [], isLoading: transactionsLoading } = useQuery<BusinessTransaction[]>({
+    queryKey: ["/api/business-transactions"],
+  });
+
+  const { data: customFields = [] } = useQuery<CustomField[]>({
+    queryKey: ["/api/custom-fields"],
+  });
+
+  const createTransactionMutation = useMutation({
+    mutationFn: (transaction: any) => apiRequest("/api/business-transactions", "POST", transaction),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
+      setTransactionDialogOpen(false);
+      toast({
+        title: "Transaction created",
+        description: "Your transaction has been created successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateTransactionMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiRequest(`/api/business-transactions/${id}`, "PUT", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
+      setEditingTransaction(null);
+      toast({
+        title: "Transaction updated",
+        description: "Your transaction has been updated successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deleteTransactionMutation = useMutation({
+    mutationFn: (id: string) => apiRequest(`/api/business-transactions/${id}`, "DELETE"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
+      toast({
+        title: "Transaction deleted",
+        description: "Your transaction has been deleted successfully.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete transaction",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const filteredTransactions = transactions.filter((transaction) => {
+    const matchesSearch = searchQuery
+      ? transaction.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        transaction.category.toLowerCase().includes(searchQuery.toLowerCase())
+      : true;
+
+    const matchesType = typeFilter === "all" ? true : transaction.type === typeFilter;
+
+    const transactionDate = new Date(transaction.date);
+    const matchesDateFrom = dateFrom ? transactionDate >= new Date(dateFrom) : true;
+    const matchesDateTo = dateTo ? transactionDate <= new Date(dateTo) : true;
+
+    return matchesSearch && matchesType && matchesDateFrom && matchesDateTo;
+  });
+
+  const totalIncome = filteredTransactions
     .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
 
-  const totalExpense = transactions
+  const totalExpense = filteredTransactions
     .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
 
   const netCashFlow = totalIncome - totalExpense;
 
@@ -106,8 +132,53 @@ export default function BusinessTransactions() {
     setReviewDialogOpen(true);
   };
 
-  const handleSaveImportedTransactions = (transactions: any[]) => {
-    console.log("Saving imported business transactions:", transactions);
+  const handleSaveImportedTransactions = async (transactions: any[]) => {
+    try {
+      for (const transaction of transactions) {
+        await apiRequest("/api/business-transactions", "POST", transaction);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
+      setReviewDialogOpen(false);
+      toast({
+        title: "Transactions imported",
+        description: `${transactions.length} transactions have been imported successfully.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to import transactions",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSaveTransaction = (transaction: any) => {
+    if (editingTransaction) {
+      updateTransactionMutation.mutate({ id: editingTransaction.id, data: transaction });
+    } else {
+      createTransactionMutation.mutate(transaction);
+    }
+  };
+
+  const handleEditTransaction = (id: string) => {
+    const transaction = transactions.find((t) => t.id === id);
+    if (transaction) {
+      setEditingTransaction(transaction);
+      setTransactionDialogOpen(true);
+    }
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+    if (confirm("Are you sure you want to delete this transaction?")) {
+      deleteTransactionMutation.mutate(id);
+    }
+  };
+
+  const handleTransactionDialogClose = (open: boolean) => {
+    setTransactionDialogOpen(open);
+    if (!open) {
+      setEditingTransaction(null);
+    }
   };
 
   return (
@@ -250,102 +321,122 @@ export default function BusinessTransactions() {
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
-        {transactions.map((transaction) => (
-          <Card key={transaction.id} className="hover-elevate">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap mb-2">
-                    <Badge
-                      className={
-                        transaction.type === "income"
-                          ? "bg-chart-2 text-white"
-                          : "bg-chart-3 text-white"
-                      }
-                      data-testid={`badge-type-${transaction.id}`}
+      {transactionsLoading ? (
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <Skeleton className="h-20 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : filteredTransactions.length > 0 ? (
+        <div className="space-y-3">
+          {filteredTransactions.map((transaction) => (
+            <Card key={transaction.id} className="hover-elevate">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                      <Badge
+                        className={
+                          transaction.type === "income"
+                            ? "bg-chart-2 text-white"
+                            : "bg-chart-3 text-white"
+                        }
+                        data-testid={`badge-type-${transaction.id}`}
+                      >
+                        {transaction.type}
+                      </Badge>
+                      <Badge variant="outline" data-testid={`badge-category-${transaction.id}`}>
+                        {transaction.category}
+                      </Badge>
+                      <span className="text-sm text-muted-foreground">
+                        {transaction.date}
+                      </span>
+                    </div>
+
+                    <h3 className="font-semibold mb-1" data-testid={`text-description-${transaction.id}`}>
+                      {transaction.description}
+                    </h3>
+
+                    <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
+                      <span>Payment: {transaction.paymentMethod}</span>
+                      {transaction.customFields &&
+                        Object.entries(transaction.customFields as Record<string, any>).map(([key, value]) => (
+                          <span key={key}>
+                            {key}: <span className="font-medium">{String(value)}</span>
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-xl font-bold whitespace-nowrap ${
+                        transaction.type === "income" ? "text-chart-2" : "text-chart-3"
+                      }`}
+                      data-testid={`text-amount-${transaction.id}`}
                     >
-                      {transaction.type}
-                    </Badge>
-                    <Badge variant="outline" data-testid={`badge-category-${transaction.id}`}>
-                      {transaction.category}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {transaction.date}
+                      {transaction.type === "income" ? "+" : "-"}$
+                      {parseFloat(transaction.amount).toFixed(2)}
                     </span>
-                  </div>
-
-                  <h3 className="font-semibold mb-1" data-testid={`text-description-${transaction.id}`}>
-                    {transaction.description}
-                  </h3>
-
-                  <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
-                    <span>Payment: {transaction.paymentMethod}</span>
-                    {transaction.customFields &&
-                      Object.entries(transaction.customFields).map(([key, value]) => (
-                        <span key={key}>
-                          {key}: <span className="font-medium">{value}</span>
-                        </span>
-                      ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-xl font-bold whitespace-nowrap ${
-                      transaction.type === "income" ? "text-chart-2" : "text-chart-3"
-                    }`}
-                    data-testid={`text-amount-${transaction.id}`}
-                  >
-                    {transaction.type === "income" ? "+" : "-"}$
-                    {transaction.amount.toFixed(2)}
-                  </span>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => console.log("Edit transaction:", transaction.id)}
-                      data-testid={`button-edit-transaction-${transaction.id}`}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => console.log("Delete transaction:", transaction.id)}
-                      data-testid={`button-delete-transaction-${transaction.id}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditTransaction(transaction.id)}
+                        data-testid={`button-edit-transaction-${transaction.id}`}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDeleteTransaction(transaction.id)}
+                        data-testid={`button-delete-transaction-${transaction.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card>
+          <CardContent className="pt-6 pb-6 text-center text-muted-foreground">
+            {transactions.length === 0
+              ? "No transactions yet. Click 'Add Transaction' to create one."
+              : "No transactions match the current filters."}
+          </CardContent>
+        </Card>
+      )}
 
       <TransactionDialog
         open={transactionDialogOpen}
-        onOpenChange={setTransactionDialogOpen}
+        onOpenChange={handleTransactionDialogClose}
+        transaction={editingTransaction}
         customFields={customFields}
-        onSave={(transaction: any) => console.log("Save transaction:", transaction)}
+        onSave={handleSaveTransaction}
       />
 
       <CustomFieldDialog
         open={customFieldDialogOpen}
         onOpenChange={setCustomFieldDialogOpen}
         customFields={customFields}
-        onSave={(fields: any) => {
-          setCustomFields(fields);
-          console.log("Updated custom fields:", fields);
+        onSave={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/custom-fields"] });
         }}
       />
 
       <ReportDialog
         open={reportDialogOpen}
         onOpenChange={setReportDialogOpen}
-        transactions={transactions}
+        transactions={filteredTransactions}
         onGenerate={(format: any, filters: any) =>
           console.log("Generate report:", format, filters)
         }
