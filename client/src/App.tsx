@@ -8,6 +8,8 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { MobileNav } from "@/components/MobileNav";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
@@ -52,44 +54,60 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
       <Route path="/dashboard">
-        <AuthenticatedLayout>
-          <Dashboard />
-        </AuthenticatedLayout>
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <Dashboard />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/expenses">
-        <AuthenticatedLayout>
-          <Expenses />
-        </AuthenticatedLayout>
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <Expenses />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/budgets">
-        <AuthenticatedLayout>
-          <Budgets />
-        </AuthenticatedLayout>
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <Budgets />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/loans">
-        <AuthenticatedLayout>
-          <Loans />
-        </AuthenticatedLayout>
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <Loans />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/business">
-        <AuthenticatedLayout>
-          <BusinessTransactions />
-        </AuthenticatedLayout>
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <BusinessTransactions />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/analytics">
-        <AuthenticatedLayout>
-          <Analytics />
-        </AuthenticatedLayout>
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <Analytics />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/settings">
-        <AuthenticatedLayout>
-          <Settings />
-        </AuthenticatedLayout>
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <Settings />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
       </Route>
       <Route path="/profile">
-        <AuthenticatedLayout>
-          <Profile />
-        </AuthenticatedLayout>
+        <ProtectedRoute>
+          <AuthenticatedLayout>
+            <Profile />
+          </AuthenticatedLayout>
+        </ProtectedRoute>
       </Route>
       <Route component={NotFound} />
     </Switch>
@@ -99,12 +117,14 @@ function Router() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider defaultTheme="light">
-        <TooltipProvider>
-          <Router />
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
+      <AuthProvider>
+        <ThemeProvider defaultTheme="light">
+          <TooltipProvider>
+            <Router />
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

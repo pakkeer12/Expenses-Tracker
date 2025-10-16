@@ -23,6 +23,7 @@ import {
 import { useLocation } from "wouter";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const menuItems = [
   {
@@ -68,7 +69,25 @@ const menuItems = [
 ];
 
 export function AppSidebar() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    setLocation("/login");
+  };
+
+  const getInitials = (name?: string | null, username?: string) => {
+    if (name) {
+      return name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2);
+    }
+    return username ? username.slice(0, 2).toUpperCase() : "U";
+  };
 
   return (
     <Sidebar>
@@ -99,17 +118,18 @@ export function AppSidebar() {
       <SidebarFooter className="p-4">
         <div className="flex items-center gap-3 p-2">
           <Avatar>
-            <AvatarFallback>JD</AvatarFallback>
+            <AvatarFallback>{getInitials(user?.name, user?.username)}</AvatarFallback>
           </Avatar>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">John Doe</p>
-            <p className="text-xs text-muted-foreground truncate">john@example.com</p>
+            <p className="text-sm font-medium truncate">{user?.name || user?.username || "User"}</p>
+            <p className="text-xs text-muted-foreground truncate">{user?.email || "No email"}</p>
           </div>
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => console.log("Logout clicked")}
+            onClick={handleLogout}
             data-testid="button-logout"
+            title="Logout"
           >
             <LogOut className="h-4 w-4" />
           </Button>

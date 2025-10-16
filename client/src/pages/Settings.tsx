@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
 
 const currencies = [
   { code: "USD", symbol: "$", name: "US Dollar" },
@@ -24,29 +26,92 @@ const currencies = [
   { code: "AUD", symbol: "A$", name: "Australian Dollar" },
 ];
 
-//todo: remove mock functionality
 const defaultCategories = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education"];
 
 export default function Settings() {
+  const { user, refetchUser } = useAuth();
+  const { toast } = useToast();
   const [currency, setCurrency] = useState("USD");
   const [categories, setCategories] = useState(defaultCategories);
   const [newCategory, setNewCategory] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      setCurrency(user.currency || "USD");
+      setCategories(user.categories || defaultCategories);
+    }
+  }, [user]);
 
   const handleAddCategory = () => {
     if (newCategory.trim() && !categories.includes(newCategory.trim())) {
       setCategories([...categories, newCategory.trim()]);
       setNewCategory("");
-      console.log("Added category:", newCategory);
     }
   };
 
   const handleRemoveCategory = (category: string) => {
     setCategories(categories.filter((c) => c !== category));
-    console.log("Removed category:", category);
   };
 
-  const handleSaveCurrency = () => {
-    console.log("Currency changed to:", currency);
+  const handleSaveCurrency = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/auth/user", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currency }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save currency");
+      }
+
+      await refetchUser();
+      toast({
+        title: "Currency saved",
+        description: "Your currency preference has been updated.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save currency",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveCategories = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch("/api/auth/user", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categories }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save categories");
+      }
+
+      await refetchUser();
+      toast({
+        title: "Categories saved",
+        description: "Your categories have been updated.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save categories",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -83,8 +148,8 @@ export default function Settings() {
               {currencies.find((c) => c.code === currency)?.symbol} {currency}
             </Badge>
           </div>
-          <Button onClick={handleSaveCurrency} data-testid="button-save-currency">
-            Save Currency
+          <Button onClick={handleSaveCurrency} disabled={saving} data-testid="button-save-currency">
+            {saving ? "Saving..." : "Save Currency"}
           </Button>
         </CardContent>
       </Card>
@@ -135,6 +200,9 @@ export default function Settings() {
               ))}
             </div>
           </div>
+          <Button onClick={handleSaveCategories} disabled={saving} data-testid="button-save-categories">
+            {saving ? "Saving..." : "Save Categories"}
+          </Button>
         </CardContent>
       </Card>
     </div>
