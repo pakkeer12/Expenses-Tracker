@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { 
   users, expenses, budgets, loans, loanPayments, businessTransactions, customFields,
-  type User, type InsertUser,
+  type User, type InsertUser, type UpdateUser,
   type Expense, type InsertExpense,
   type Budget, type InsertBudget,
   type Loan, type InsertLoan,
@@ -16,6 +16,8 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, user: UpdateUser): Promise<User | undefined>;
+  updateUserPassword(id: string, hashedPassword: string): Promise<boolean>;
 
   // Expense methods
   getExpenses(userId: string): Promise<Expense[]>;
@@ -74,6 +76,16 @@ export class DatabaseStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const result = await db.insert(users).values(insertUser).returning();
     return result[0];
+  }
+
+  async updateUser(id: string, user: UpdateUser): Promise<User | undefined> {
+    const result = await db.update(users).set(user).where(eq(users.id, id)).returning();
+    return result[0];
+  }
+
+  async updateUserPassword(id: string, hashedPassword: string): Promise<boolean> {
+    const result = await db.update(users).set({ password: hashedPassword }).where(eq(users.id, id)).returning();
+    return result.length > 0;
   }
 
   // Expense methods

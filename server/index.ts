@@ -1,10 +1,32 @@
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { db } from "./db";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+const PgStore = connectPgSimple(session);
+
+app.use(
+  session({
+    store: new PgStore({
+      pool: db as any,
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET || "expense-tracker-secret-key-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+    },
+  })
+);
 
 app.use((req, res, next) => {
   const start = Date.now();

@@ -1,26 +1,163 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertExpenseSchema, insertBudgetSchema, insertLoanSchema, insertLoanPaymentSchema, insertBusinessTransactionSchema, insertCustomFieldSchema } from "@shared/schema";
+import "./types";
+import bcrypt from "bcrypt";
+import {
+  insertUserSchema,
+  updateUserSchema,
+  updatePasswordSchema,
+  insertExpenseSchema,
+  insertBudgetSchema,
+  insertLoanSchema,
+  insertLoanPaymentSchema,
+  insertBusinessTransactionSchema,
+  insertCustomFieldSchema,
+} from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
-// Temporary hardcoded user ID until authentication is implemented
-const TEMP_USER_ID = "temp-user-001";
+const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Authentication required" });
+  }
+  next();
+};
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Expense routes
-  app.get("/api/expenses", async (req, res) => {
+  // Authentication routes
+  app.post("/api/auth/signup", async (req, res) => {
     try {
-      const expenses = await storage.getExpenses(TEMP_USER_ID);
+      const parsed = insertUserSchema.parse(req.body);
+      
+      const existingUser = await storage.getUserByUsername(parsed.username);
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(parsed.password, 10);
+      const user = await storage.createUser({
+        ...parsed,
+        password: hashedPassword,
+      });
+
+      req.session.userId = user.id;
+      const { password, ...userWithoutPassword } = user;
+      res.status(201).json(userWithoutPassword);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        res.status(400).json({ message: fromZodError(error).message });
+      } else {
+        res.status(500).json({ message: error.message });
+      }
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { username, password } = req.body;
+
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password are required" });
+      }
+
+      const user = await storage.getUserByUsername(username);
+      if (!user) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      const validPassword = await bcrypt.compare(password, user.password);
+      if (!validPassword) {
+        return res.status(401).json({ message: "Invalid credentials" });
+      }
+
+      req.session.userId = user.id;
+      const { password: _, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Could not log out" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  app.get("/api/auth/user", requireAuth, async (req, res) => {
+    try {
+      const user = await storage.getUser(req.session.userId!);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.put("/api/auth/user", requireAuth, async (req, res) => {
+    try {
+      const parsed = updateUserSchema.parse(req.body);
+      const user = await storage.updateUser(req.session.userId!, parsed);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const { password, ...userWithoutPassword } = user;
+      res.json(userWithoutPassword);
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        res.status(400).json({ message: fromZodError(error).message });
+      } else {
+        res.status(500).json({ message: error.message });
+      }
+    }
+  });
+
+  app.put("/api/auth/user/password", requireAuth, async (req, res) => {
+    try {
+      const parsed = updatePasswordSchema.parse(req.body);
+      const user = await storage.getUser(req.session.userId!);
+      
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const validPassword = await bcrypt.compare(parsed.currentPassword, user.password);
+      if (!validPassword) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      const hashedPassword = await bcrypt.hash(parsed.newPassword, 10);
+      await storage.updateUserPassword(user.id, hashedPassword);
+      
+      res.json({ message: "Password updated successfully" });
+    } catch (error: any) {
+      if (error.name === "ZodError") {
+        res.status(400).json({ message: fromZodError(error).message });
+      } else {
+        res.status(500).json({ message: error.message });
+      }
+    }
+  });
+
+  // Expense routes
+  app.get("/api/expenses", requireAuth, async (req, res) => {
+    try {
+      const expenses = await storage.getExpenses(req.session.userId!);
       res.json(expenses);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.post("/api/expenses", async (req, res) => {
+  app.post("/api/expenses", requireAuth, async (req, res) => {
     try {
-      const parsed = insertExpenseSchema.parse({ ...req.body, userId: TEMP_USER_ID });
+      const parsed = insertExpenseSchema.parse({ ...req.body, userId: req.session.userId! });
       const expense = await storage.createExpense(parsed);
       res.status(201).json(expense);
     } catch (error: any) {
@@ -32,7 +169,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/expenses/:id", async (req, res) => {
+  app.put("/api/expenses/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const parsed = insertExpenseSchema.partial().parse(req.body);
@@ -50,7 +187,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/expenses/:id", async (req, res) => {
+  app.delete("/api/expenses/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteExpense(id);
@@ -64,18 +201,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Budget routes
-  app.get("/api/budgets", async (req, res) => {
+  app.get("/api/budgets", requireAuth, async (req, res) => {
     try {
-      const budgets = await storage.getBudgets(TEMP_USER_ID);
+      const budgets = await storage.getBudgets(req.session.userId!);
       res.json(budgets);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.post("/api/budgets", async (req, res) => {
+  app.post("/api/budgets", requireAuth, async (req, res) => {
     try {
-      const parsed = insertBudgetSchema.parse({ ...req.body, userId: TEMP_USER_ID });
+      const parsed = insertBudgetSchema.parse({ ...req.body, userId: req.session.userId! });
       const budget = await storage.createBudget(parsed);
       res.status(201).json(budget);
     } catch (error: any) {
@@ -87,7 +224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/budgets/:id", async (req, res) => {
+  app.put("/api/budgets/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const parsed = insertBudgetSchema.partial().parse(req.body);
@@ -105,7 +242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/budgets/:id", async (req, res) => {
+  app.delete("/api/budgets/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteBudget(id);
@@ -119,18 +256,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Loan routes
-  app.get("/api/loans", async (req, res) => {
+  app.get("/api/loans", requireAuth, async (req, res) => {
     try {
-      const loans = await storage.getLoans(TEMP_USER_ID);
+      const loans = await storage.getLoans(req.session.userId!);
       res.json(loans);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.post("/api/loans", async (req, res) => {
+  app.post("/api/loans", requireAuth, async (req, res) => {
     try {
-      const parsed = insertLoanSchema.parse({ ...req.body, userId: TEMP_USER_ID });
+      const parsed = insertLoanSchema.parse({ ...req.body, userId: req.session.userId! });
       const loan = await storage.createLoan(parsed);
       res.status(201).json(loan);
     } catch (error: any) {
@@ -142,7 +279,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/loans/:id", async (req, res) => {
+  app.put("/api/loans/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const parsed = insertLoanSchema.partial().parse(req.body);
@@ -160,7 +297,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/loans/:id", async (req, res) => {
+  app.delete("/api/loans/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteLoan(id);
@@ -174,7 +311,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Loan Payment routes
-  app.get("/api/loans/:loanId/payments", async (req, res) => {
+  app.get("/api/loans/:loanId/payments", requireAuth, async (req, res) => {
     try {
       const { loanId } = req.params;
       const payments = await storage.getLoanPayments(loanId);
@@ -184,7 +321,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/loans/:loanId/payments", async (req, res) => {
+  app.post("/api/loans/:loanId/payments", requireAuth, async (req, res) => {
     try {
       const { loanId } = req.params;
       const parsed = insertLoanPaymentSchema.parse({ ...req.body, loanId });
@@ -207,7 +344,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/payments/:id", async (req, res) => {
+  app.put("/api/payments/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -246,7 +383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/payments/:id", async (req, res) => {
+  app.delete("/api/payments/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -276,18 +413,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Business Transaction routes
-  app.get("/api/business-transactions", async (req, res) => {
+  app.get("/api/business-transactions", requireAuth, async (req, res) => {
     try {
-      const transactions = await storage.getBusinessTransactions(TEMP_USER_ID);
+      const transactions = await storage.getBusinessTransactions(req.session.userId!);
       res.json(transactions);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.post("/api/business-transactions", async (req, res) => {
+  app.post("/api/business-transactions", requireAuth, async (req, res) => {
     try {
-      const parsed = insertBusinessTransactionSchema.parse({ ...req.body, userId: TEMP_USER_ID });
+      const parsed = insertBusinessTransactionSchema.parse({ ...req.body, userId: req.session.userId! });
       const transaction = await storage.createBusinessTransaction(parsed);
       res.status(201).json(transaction);
     } catch (error: any) {
@@ -299,7 +436,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/business-transactions/:id", async (req, res) => {
+  app.put("/api/business-transactions/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const parsed = insertBusinessTransactionSchema.partial().parse(req.body);
@@ -317,7 +454,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/business-transactions/:id", async (req, res) => {
+  app.delete("/api/business-transactions/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteBusinessTransaction(id);
@@ -331,18 +468,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Custom Field routes
-  app.get("/api/custom-fields", async (req, res) => {
+  app.get("/api/custom-fields", requireAuth, async (req, res) => {
     try {
-      const fields = await storage.getCustomFields(TEMP_USER_ID);
+      const fields = await storage.getCustomFields(req.session.userId!);
       res.json(fields);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
   });
 
-  app.post("/api/custom-fields", async (req, res) => {
+  app.post("/api/custom-fields", requireAuth, async (req, res) => {
     try {
-      const parsed = insertCustomFieldSchema.parse({ ...req.body, userId: TEMP_USER_ID });
+      const parsed = insertCustomFieldSchema.parse({ ...req.body, userId: req.session.userId! });
       const field = await storage.createCustomField(parsed);
       res.status(201).json(field);
     } catch (error: any) {
@@ -354,7 +491,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/custom-fields/:id", async (req, res) => {
+  app.put("/api/custom-fields/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const parsed = insertCustomFieldSchema.partial().parse(req.body);
@@ -372,7 +509,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/custom-fields/:id", async (req, res) => {
+  app.delete("/api/custom-fields/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const deleted = await storage.deleteCustomField(id);
@@ -386,10 +523,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dashboard analytics routes
-  app.get("/api/dashboard/stats", async (req, res) => {
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
-      const expenses = await storage.getExpenses(TEMP_USER_ID);
-      const businessTransactions = await storage.getBusinessTransactions(TEMP_USER_ID);
+      const expenses = await storage.getExpenses(req.session.userId!);
+      const businessTransactions = await storage.getBusinessTransactions(req.session.userId!);
       
       const totalExpenses = expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
       
@@ -416,9 +553,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/dashboard/category-breakdown", async (req, res) => {
+  app.get("/api/dashboard/category-breakdown", requireAuth, async (req, res) => {
     try {
-      const expenses = await storage.getExpenses(TEMP_USER_ID);
+      const expenses = await storage.getExpenses(req.session.userId!);
       const categoryMap = new Map<string, number>();
       
       expenses.forEach(exp => {
@@ -437,9 +574,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/dashboard/monthly-trend", async (req, res) => {
+  app.get("/api/dashboard/monthly-trend", requireAuth, async (req, res) => {
     try {
-      const expenses = await storage.getExpenses(TEMP_USER_ID);
+      const expenses = await storage.getExpenses(req.session.userId!);
       
       // Group expenses by month
       const monthlyMap = new Map<string, number>();

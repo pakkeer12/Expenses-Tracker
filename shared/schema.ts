@@ -7,6 +7,10 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  name: text("name"),
+  email: text("email"),
+  currency: text("currency").default("USD"),
+  categories: text("categories").array().default(sql`ARRAY['Food', 'Transport', 'Entertainment', 'Shopping', 'Bills', 'Healthcare', 'Education']::text[]`),
 });
 
 export const expenses = pgTable("expenses", {
@@ -78,6 +82,20 @@ export const customFields = pgTable("custom_fields", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  name: true,
+  email: true,
+});
+
+export const updateUserSchema = createInsertSchema(users).pick({
+  name: true,
+  email: true,
+  currency: true,
+  categories: true,
+}).partial();
+
+export const updatePasswordSchema = z.object({
+  currentPassword: z.string(),
+  newPassword: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 export const insertExpenseSchema = createInsertSchema(expenses).omit({
@@ -113,6 +131,8 @@ export const insertCustomFieldSchema = createInsertSchema(customFields).omit({
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+export type UpdateUser = z.infer<typeof updateUserSchema>;
+export type UpdatePassword = z.infer<typeof updatePasswordSchema>;
 
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type Expense = typeof expenses.$inferSelect;
