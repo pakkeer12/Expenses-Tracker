@@ -40,9 +40,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
       });
 
-      req.session.userId = user.id;
-      const { password, ...userWithoutPassword } = user;
-      res.status(201).json(userWithoutPassword);
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Session error" });
+        }
+        req.session.userId = user.id;
+        const { password, ...userWithoutPassword } = user;
+        res.status(201).json(userWithoutPassword);
+      });
     } catch (error: any) {
       if (error.name === "ZodError") {
         res.status(400).json({ message: fromZodError(error).message });
@@ -70,9 +75,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      req.session.userId = user.id;
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      req.session.regenerate((err) => {
+        if (err) {
+          return res.status(500).json({ message: "Session error" });
+        }
+        req.session.userId = user.id;
+        const { password: _, ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+      });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
