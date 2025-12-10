@@ -1,21 +1,20 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
+import createMemoryStore from "memorystore";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { db, pool } from "./db";
+import { db } from "./db";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-const PgStore = connectPgSimple(session);
+const MemoryStore = createMemoryStore(session);
 
 app.use(
   session({
-    store: new PgStore({
-      pool: pool,
-      createTableIfMissing: true,
+    store: new MemoryStore({
+      checkPeriod: 86400000, // prune expired entries every 24h
     }),
     secret: process.env.SESSION_SECRET || "expense-tracker-secret-key-change-in-production",
     resave: false,

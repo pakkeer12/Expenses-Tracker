@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 interface TransactionDialogProps {
   open: boolean;
@@ -27,7 +29,6 @@ interface TransactionDialogProps {
 }
 
 const transactionTypes = ["income", "expense"];
-const categories = ["Sales", "Services", "Supplies", "Utilities", "Rent", "Salaries", "Other"];
 const paymentMethods = ["Cash", "Bank Transfer", "Credit Card", "Debit Card", "Check", "Other"];
 
 export function TransactionDialog({
@@ -37,6 +38,12 @@ export function TransactionDialog({
   onSave,
   transaction,
 }: TransactionDialogProps) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const categories = Array.isArray(user?.categories) 
+    ? user.categories 
+    : ["Sales", "Services", "Supplies", "Utilities", "Rent", "Salaries", "Other"];
+  
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
     type: "income",
@@ -45,6 +52,14 @@ export function TransactionDialog({
     description: "",
     paymentMethod: "",
     customFields: {} as Record<string, any>,
+  });
+
+  const [errors, setErrors] = useState({
+    date: "",
+    amount: "",
+    category: "",
+    description: "",
+    paymentMethod: "",
   });
 
   useEffect(() => {
@@ -69,9 +84,101 @@ export function TransactionDialog({
         customFields: {},
       });
     }
+    // Reset errors when dialog opens/closes or transaction changes
+    setErrors({
+      date: "",
+      amount: "",
+      category: "",
+      description: "",
+      paymentMethod: "",
+    });
   }, [transaction, open]);
 
+  const validateForm = () => {
+    const newErrors = {
+      date: "",
+      amount: "",
+      category: "",
+      description: "",
+      paymentMethod: "",
+    };
+
+    let isValid = true;
+
+    // Date validation
+    if (!formData.date) {
+      newErrors.date = "Date is required";
+      isValid = false;
+    } else {
+      const selectedDate = new Date(formData.date);
+      const today = new Date();
+      today.setHours(23, 59, 59, 999); // Set to end of today
+      
+      if (selectedDate > today) {
+        newErrors.date = "Date cannot be in the future";
+        isValid = false;
+      }
+    }
+
+    // Amount validation
+    if (!formData.amount || formData.amount.trim() === "") {
+      newErrors.amount = "Amount is required";
+      isValid = false;
+    } else {
+      const amount = parseFloat(formData.amount);
+      if (isNaN(amount)) {
+        newErrors.amount = "Please enter a valid number";
+        isValid = false;
+      } else if (amount <= 0) {
+        newErrors.amount = "Amount must be greater than 0";
+        isValid = false;
+      } else if (amount > 999999999) {
+        newErrors.amount = "Amount is too large";
+        isValid = false;
+      } else if (!/^\d+(\.\d{1,2})?$/.test(formData.amount)) {
+        newErrors.amount = "Amount can have at most 2 decimal places";
+        isValid = false;
+      }
+    }
+
+    // Category validation
+    if (!formData.category) {
+      newErrors.category = "Category is required";
+      isValid = false;
+    }
+
+    // Description validation
+    if (!formData.description || formData.description.trim() === "") {
+      newErrors.description = "Description is required";
+      isValid = false;
+    } else if (formData.description.length < 3) {
+      newErrors.description = "Description must be at least 3 characters";
+      isValid = false;
+    } else if (formData.description.length > 500) {
+      newErrors.description = "Description must not exceed 500 characters";
+      isValid = false;
+    }
+
+    // Payment method validation
+    if (!formData.paymentMethod) {
+      newErrors.paymentMethod = "Payment method is required";
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
   const handleSave = () => {
+    if (!validateForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the errors before saving",
+        variant: "destructive",
+      });
+      return;
+    }
+
     onSave?.(formData);
     onOpenChange(false);
   };
@@ -95,18 +202,23 @@ export function TransactionDialog({
         <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="date">Date</Label>
+              <Label htmlFor="date">Date <span className="text-destructive">*</span></Label>
               <Input
                 id="date"
                 type="date"
                 value={formData.date}
+                max={new Date().toISOString().split("T")[0]}
                 onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                 data-testid="input-transaction-date"
+                className={errors.date ? "border-destructive" : ""}
               />
+              {errors.date && (
+                <p className="text-sm text-destructive">{errors.date}</p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="type">Type</Label>
+              <Label htmlFor="type">Type <span className="text-destructive">*</span></Label>
               <Select
                 value={formData.type}
                 onValueChange={(value) => setFormData({ ...formData, type: value })}
@@ -127,24 +239,30 @@ export function TransactionDialog({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="amount">Amount</Label>
+              <Label htmlFor="amount">Amount <span className="text-destructive">*</span></Label>
               <Input
                 id="amount"
                 type="number"
+                step="0.01"
+                min="0"
                 placeholder="0.00"
                 value={formData.amount}
                 onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
                 data-testid="input-transaction-amount"
+                className={errors.amount ? "border-destructive" : ""}
               />
+              {errors.amount && (
+                <p className="text-sm text-destructive">{errors.amount}</p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
+              <Label htmlFor="category">Category <span className="text-destructive">*</span></Label>
               <Select
                 value={formData.category}
                 onValueChange={(value) => setFormData({ ...formData, category: value })}
               >
-                <SelectTrigger data-testid="select-transaction-category">
+                <SelectTrigger data-testid="select-transaction-category" className={errors.category ? "border-destructive" : ""}>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -155,16 +273,19 @@ export function TransactionDialog({
                   ))}
                 </SelectContent>
               </Select>
+              {errors.category && (
+                <p className="text-sm text-destructive">{errors.category}</p>
+              )}
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="paymentMethod">Payment Method</Label>
+            <Label htmlFor="paymentMethod">Payment Method <span className="text-destructive">*</span></Label>
             <Select
               value={formData.paymentMethod}
               onValueChange={(value) => setFormData({ ...formData, paymentMethod: value })}
             >
-              <SelectTrigger data-testid="select-payment-method">
+              <SelectTrigger data-testid="select-payment-method" className={errors.paymentMethod ? "border-destructive" : ""}>
                 <SelectValue placeholder="Select payment method" />
               </SelectTrigger>
               <SelectContent>
@@ -175,17 +296,30 @@ export function TransactionDialog({
                 ))}
               </SelectContent>
             </Select>
+            {errors.paymentMethod && (
+              <p className="text-sm text-destructive">{errors.paymentMethod}</p>
+            )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description">Description <span className="text-destructive">*</span></Label>
             <Textarea
               id="description"
               placeholder="Transaction details..."
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               data-testid="input-transaction-description"
+              className={errors.description ? "border-destructive" : ""}
+              maxLength={500}
             />
+            <div className="flex justify-between items-center">
+              {errors.description && (
+                <p className="text-sm text-destructive">{errors.description}</p>
+              )}
+              <p className="text-xs text-muted-foreground ml-auto">
+                {formData.description.length}/500
+              </p>
+            </div>
           </div>
 
           {customFields.length > 0 && (

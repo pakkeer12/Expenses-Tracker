@@ -20,6 +20,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { FileText, Download } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface ReportDialogProps {
   open: boolean;
@@ -34,6 +35,11 @@ export function ReportDialog({
   transactions,
   onGenerate,
 }: ReportDialogProps) {
+  const { user } = useAuth();
+  const categories = Array.isArray(user?.categories) 
+    ? user.categories 
+    : ["Sales", "Services", "Supplies", "Utilities", "Rent", "Salaries", "Other"];
+    
   const [format, setFormat] = useState("csv");
   const [filters, setFilters] = useState({
     dateFrom: "",
@@ -144,13 +150,9 @@ export function ReportDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Categories</SelectItem>
-                      <SelectItem value="Sales">Sales</SelectItem>
-                      <SelectItem value="Services">Services</SelectItem>
-                      <SelectItem value="Supplies">Supplies</SelectItem>
-                      <SelectItem value="Utilities">Utilities</SelectItem>
-                      <SelectItem value="Rent">Rent</SelectItem>
-                      <SelectItem value="Salaries">Salaries</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

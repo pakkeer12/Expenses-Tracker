@@ -1,81 +1,79 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, numeric, timestamp, jsonb, date, unique } from "drizzle-orm/pg-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   name: text("name"),
   email: text("email"),
   currency: text("currency").default("USD"),
-  categories: text("categories").array().default(sql`ARRAY['Food', 'Transport', 'Entertainment', 'Shopping', 'Bills', 'Healthcare', 'Education']::text[]`),
+  categories: text("categories").default("Food,Transport,Entertainment,Shopping,Bills,Healthcare,Education"),
 });
 
-export const expenses = pgTable("expenses", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const expenses = sqliteTable("expenses", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
-  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+  amount: real("amount").notNull(),
   category: text("category").notNull(),
-  date: date("date").notNull(),
+  date: text("date").notNull(),
   notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
 });
 
-export const budgets = pgTable("budgets", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const budgets = sqliteTable("budgets", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   category: text("category").notNull(),
-  limit: numeric("limit", { precision: 10, scale: 2 }).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-}, (table) => ({
-  uniqueUserCategory: unique().on(table.userId, table.category),
-}));
+  limit: real("limit").notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+});
 
-export const loans = pgTable("loans", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const loans = sqliteTable("loans", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull(),
-  paidAmount: numeric("paid_amount", { precision: 12, scale: 2 }).notNull().default("0"),
-  interestRate: numeric("interest_rate", { precision: 5, scale: 2 }).notNull(),
-  dueDate: date("due_date").notNull(),
+  totalAmount: real("total_amount").notNull(),
+  paidAmount: real("paid_amount").notNull().default(0),
+  interestRate: real("interest_rate").notNull(),
+  dueDate: text("due_date").notNull(),
   lender: text("lender").notNull(),
   type: text("type").notNull(), // personal, business, auto, mortgage
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
 });
 
-export const loanPayments = pgTable("loan_payments", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  loanId: varchar("loan_id").notNull().references(() => loans.id, { onDelete: "cascade" }),
-  amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
-  date: date("date").notNull(),
+export const loanPayments = sqliteTable("loan_payments", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  loanId: text("loan_id").notNull().references(() => loans.id, { onDelete: "cascade" }),
+  amount: real("amount").notNull(),
+  date: text("date").notNull(),
   notes: text("notes"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
 });
 
-export const businessTransactions = pgTable("business_transactions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  date: date("date").notNull(),
+export const businessTransactions = sqliteTable("business_transactions", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  date: text("date").notNull(),
   type: text("type").notNull(), // income or expense
-  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  amount: real("amount").notNull(),
   category: text("category").notNull(),
   description: text("description").notNull(),
   paymentMethod: text("payment_method").notNull(),
-  customFields: jsonb("custom_fields"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  customFields: text("custom_fields", { mode: 'json' }),
+  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
 });
 
-export const customFields = pgTable("custom_fields", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const customFields = sqliteTable("custom_fields", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   type: text("type").notNull(), // text, number, date, select
-  options: jsonb("options"), // for select type
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  options: text("options", { mode: 'json' }), // for select type
+  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
 });
 
 // Schemas for validation
@@ -90,8 +88,9 @@ export const updateUserSchema = createInsertSchema(users).pick({
   name: true,
   email: true,
   currency: true,
-  categories: true,
-}).partial();
+}).partial().extend({
+  categories: z.array(z.string()).optional(),
+});
 
 export const updatePasswordSchema = z.object({
   currentPassword: z.string(),
@@ -130,7 +129,9 @@ export const insertCustomFieldSchema = createInsertSchema(customFields).omit({
 
 // Types
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type User = Omit<typeof users.$inferSelect, 'categories'> & {
+  categories: string | null;
+};
 export type UpdateUser = z.infer<typeof updateUserSchema>;
 export type UpdatePassword = z.infer<typeof updatePasswordSchema>;
 

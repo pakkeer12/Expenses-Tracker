@@ -68,11 +68,11 @@ export default function BusinessTransactions() {
 
   const totalIncome = filteredTransactions
     .filter((t) => t.type === "income")
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const totalExpense = filteredTransactions
     .filter((t) => t.type === "expense")
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    .reduce((sum, t) => sum + Number(t.amount), 0);
 
   const netCashFlow = totalIncome - totalExpense;
 
@@ -85,7 +85,17 @@ export default function BusinessTransactions() {
   const handleSaveImportedTransactions = async (transactions: any[]) => {
     try {
       for (const transaction of transactions) {
-        await apiRequest("/api/business-transactions", "POST", transaction);
+        // Convert amount to number and ensure proper data format
+        const transactionData = {
+          ...transaction,
+          amount: typeof transaction.amount === 'string' 
+            ? parseFloat(transaction.amount) 
+            : Number(transaction.amount),
+          customFields: transaction.customFields && Object.keys(transaction.customFields).length > 0 
+            ? transaction.customFields 
+            : null,
+        };
+        await apiRequest("/api/business-transactions", "POST", transactionData);
       }
       queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
       setReviewDialogOpen(false);
@@ -104,15 +114,24 @@ export default function BusinessTransactions() {
 
   const handleSaveTransaction = async(transaction: any) => {
     try{
+      // Convert amount to number and ensure proper data format
+      const transactionData = {
+        ...transaction,
+        amount: parseFloat(transaction.amount),
+        customFields: transaction.customFields && Object.keys(transaction.customFields).length > 0 
+          ? transaction.customFields 
+          : null,
+      };
+
       if (editingTransaction) {
-      await updateBusinessTransaction.mutateAsync({ id: editingTransaction.id, data: transaction });
+      await updateBusinessTransaction.mutateAsync({ id: editingTransaction.id, data: transactionData });
       setEditingTransaction(null);
       toast({
         title: "Transaction updated",
         description: "Your transaction has been updated successfully.",
       });
     } else {
-      await createBussinessTransaction.mutateAsync(transaction);
+      await createBussinessTransaction.mutateAsync(transactionData);
       setTransactionDialogOpen(false);
       toast({
         title: "Transaction created",
@@ -361,7 +380,7 @@ export default function BusinessTransactions() {
                       data-testid={`text-amount-${transaction.id}`}
                     >
                       {transaction.type === "income" ? "+" : "-"}{symbol}
-                      {parseFloat(transaction.amount).toFixed(2)}
+                      {Number(transaction.amount).toFixed(2)}
                     </span>
                     <div className="flex gap-1">
                       <Button

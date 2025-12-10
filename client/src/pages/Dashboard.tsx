@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ExpenseDialog } from "@/components/ExpenseDialog";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCurrency } from "@/hooks/use-currency";
 
 const COLORS = [
   "hsl(var(--chart-1))",
@@ -18,6 +19,7 @@ const COLORS = [
 ];
 
 export default function Dashboard() {
+  const { symbol } = useCurrency();
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
 
   const { data: stats, isLoading: statsLoading } = useQuery<{
@@ -82,17 +84,17 @@ export default function Dashboard() {
           <>
             <StatCard
               title="Total Balance"
-              value={`$${(stats?.totalBalance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              value={`${symbol}${(stats?.totalBalance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               icon={Wallet}
             />
             <StatCard
               title="Total Income"
-              value={`$${(stats?.totalIncome ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              value={`${symbol}${(stats?.totalIncome ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               icon={DollarSign}
             />
             <StatCard
               title="Total Expenses"
-              value={`$${(stats?.totalExpenses ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+              value={`${symbol}${(stats?.totalExpenses ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
               icon={TrendingDown}
             />
             <StatCard

@@ -15,8 +15,14 @@ import {
 import { Plus, Search, Download, Upload } from "lucide-react";
 import { useExpenses, useCreateExpense, useUpdateExpense, useDeleteExpense } from "@/hooks/use-expenses";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Expenses() {
+  const { user } = useAuth();
+  const categories = Array.isArray(user?.categories) 
+    ? user.categories 
+    : ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Other"];
+    
   const { data: expenses = [], isLoading } = useExpenses();
   const createExpense = useCreateExpense();
   const updateExpense = useUpdateExpense();
@@ -72,7 +78,9 @@ export default function Expenses() {
     for (const transaction of transactions) {
       await createExpense.mutateAsync({
         title: transaction.description || "Imported expense",
-        amount: transaction.amount.toString(),
+        amount: typeof transaction.amount === 'string' 
+          ? parseFloat(transaction.amount) 
+          : Number(transaction.amount),
         category: transaction.category || "Other",
         date: transaction.date,
         notes: transaction.notes,
@@ -87,29 +95,26 @@ export default function Expenses() {
 
   const handleSaveExpense = async (data: any) => {
     try {
+      // Convert amount to number
+      const expenseData = {
+        title: data.title,
+        amount: parseFloat(data.amount),
+        category: data.category,
+        date: data.date,
+        notes: data.notes || null,
+      };
+
       if (editingExpense) {
         await updateExpense.mutateAsync({
           id: editingExpense.id,
-          data: {
-            title: data.title,
-            amount: data.amount,
-            category: data.category,
-            date: data.date,
-            notes: data.notes,
-          },
+          data: expenseData,
         });
         toast({
           title: "Success",
           description: "Expense updated successfully",
         });
       } else {
-        await createExpense.mutateAsync({
-          title: data.title,
-          amount: data.amount,
-          category: data.category,
-          date: data.date,
-          notes: data.notes,
-        });
+        await createExpense.mutateAsync(expenseData);
         toast({
           title: "Success",
           description: "Expense created successfully",
@@ -197,12 +202,9 @@ export default function Expenses() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            <SelectItem value="Food">Food</SelectItem>
-            <SelectItem value="Transport">Transport</SelectItem>
-            <SelectItem value="Entertainment">Entertainment</SelectItem>
-            <SelectItem value="Shopping">Shopping</SelectItem>
-            <SelectItem value="Bills">Bills</SelectItem>
-            <SelectItem value="Other">Other</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category} value={category}>{category}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -217,7 +219,7 @@ export default function Expenses() {
         <ExpenseList
           expenses={filteredExpenses.map(exp => ({
             ...exp,
-            amount: parseFloat(exp.amount),
+            amount: Number(exp.amount),
             date: exp.date.toString(),
             notes: exp.notes || undefined,
           }))}

@@ -20,6 +20,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowDownCircle, ArrowUpCircle } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Transaction {
   id: string;
@@ -38,14 +39,17 @@ interface TransactionReviewDialogProps {
   onSave?: (transactions: Transaction[]) => void;
 }
 
-const categories = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Salary", "Other"];
-
 export function TransactionReviewDialog({
   open,
   onOpenChange,
   transactions: initialTransactions,
   onSave,
 }: TransactionReviewDialogProps) {
+  const { user } = useAuth();
+  const categories = Array.isArray(user?.categories) 
+    ? user.categories 
+    : ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Salary", "Other"];
+    
   const [transactions, setTransactions] = useState<Transaction[]>(initialTransactions);
 
   const handleCategoryChange = (id: string, category: string) => {

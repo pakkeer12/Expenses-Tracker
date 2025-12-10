@@ -30,13 +30,13 @@ export default function Budgets() {
   const calculateSpent = (category: string): number => {
     return expenses
       .filter((exp) => exp.category === category)
-      .reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+      .reduce((sum, exp) => sum + Number(exp.amount), 0);
   };
 
   const budgetsWithSpent = budgets.map((budget) => ({
     ...budget,
     spent: calculateSpent(budget.category),
-    limit: parseFloat(budget.limit),
+    limit: Number(budget.limit),
   }));
 
   const totalSpent = budgetsWithSpent.reduce((sum, budget) => sum + budget.spent, 0);
@@ -45,15 +45,21 @@ export default function Budgets() {
 
   const handleSave = async (budget: any) => {
     try {
+    // Convert limit to number
+    const budgetData = {
+      ...budget,
+      limit: parseFloat(budget.limit),
+    };
+
     if (editingBudget) {
-      await updateMutation.mutateAsync({ id: editingBudget.id, data: budget });
+      await updateMutation.mutateAsync({ id: editingBudget.id, data: budgetData });
       setEditingBudget(null);
       toast({
         title: "Budget updated",
         description: "Your budget has been updated successfully.",
       });
     } else {
-      await createMutation.mutateAsync(budget);
+      await createMutation.mutateAsync(budgetData);
       setBudgetDialogOpen(false);
       toast({
         title: "Budget created",

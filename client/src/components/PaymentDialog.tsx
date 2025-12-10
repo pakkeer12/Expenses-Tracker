@@ -61,12 +61,17 @@ export function PaymentDialog({ open, onOpenChange, loan, onSave }: PaymentDialo
   });
 
   const handleSave = () => {
-    createPaymentMutation.mutate(formData);
+    // Convert amount to number before submitting
+    const paymentData = {
+      ...formData,
+      amount: parseFloat(formData.amount),
+    };
+    createPaymentMutation.mutate(paymentData);
   };
 
   if (!loan) return null;
 
-  const remaining = parseFloat(loan.totalAmount) - parseFloat(loan.paidAmount);
+  const remaining = Number(loan.totalAmount) - Number(loan.paidAmount);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

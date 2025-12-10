@@ -41,7 +41,7 @@ export default function Analytics() {
     const categoryMap = new Map<string, number>();
     expenses.forEach((exp) => {
       const current = categoryMap.get(exp.category) || 0;
-      categoryMap.set(exp.category, current + parseFloat(exp.amount));
+      categoryMap.set(exp.category, current + Number(exp.amount));
     });
     return Array.from(categoryMap.entries())
       .map(([name, value], index) => ({
@@ -56,12 +56,12 @@ export default function Analytics() {
     const spentMap = new Map<string, number>();
     expenses.forEach((exp) => {
       const current = spentMap.get(exp.category) || 0;
-      spentMap.set(exp.category, current + parseFloat(exp.amount));
+      spentMap.set(exp.category, current + Number(exp.amount));
     });
 
     const budgetMap = new Map<string, number>();
     budgets.forEach((budget) => {
-      budgetMap.set(budget.category, parseFloat(budget.limit));
+      budgetMap.set(budget.category, Number(budget.limit));
     });
 
     const allCategories = Array.from(new Set([...Array.from(spentMap.keys()), ...Array.from(budgetMap.keys())]));
@@ -81,11 +81,11 @@ export default function Analytics() {
       const current = monthlyMap.get(monthKey) || { expenses: 0, budget: 0 };
       monthlyMap.set(monthKey, {
         ...current,
-        expenses: current.expenses + parseFloat(exp.amount),
+        expenses: current.expenses + Number(exp.amount),
       });
     });
 
-    const totalBudget = budgets.reduce((sum, b) => sum + parseFloat(b.limit), 0);
+    const totalBudget = budgets.reduce((sum, b) => sum + Number(b.limit), 0);
     monthlyMap.forEach((value, key) => {
       monthlyMap.set(key, { ...value, budget: totalBudget });
     });
@@ -108,7 +108,7 @@ export default function Analytics() {
 
   const avgDailySpending = useMemo(() => {
     if (expenses.length === 0) return 0;
-    const total = expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+    const total = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
     const dates = expenses.map((exp) => new Date(exp.date).getTime());
     const minDate = Math.min(...dates);
     const maxDate = Math.max(...dates);

@@ -2,6 +2,7 @@ import { Edit, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { useCurrency } from "@/hooks/use-currency";
 
 interface Expense {
   id: string;
@@ -28,6 +29,8 @@ const categoryColors: Record<string, string> = {
 };
 
 export function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListProps) {
+  const { symbol } = useCurrency();
+  
   return (
     <div className="space-y-3">
       {expenses.map((expense) => (
@@ -55,7 +58,7 @@ export function ExpenseList({ expenses, onEdit, onDelete }: ExpenseListProps) {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-lg font-bold whitespace-nowrap" data-testid={`text-expense-amount-${expense.id}`}>
-                  ${expense.amount.toFixed(2)}
+                  {symbol}{expense.amount.toFixed(2)}
                 </span>
                 <div className="flex gap-1">
                   <Button

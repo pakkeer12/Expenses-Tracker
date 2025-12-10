@@ -11,6 +11,7 @@ import { PaymentDialog } from "@/components/PaymentDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Loan } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/use-currency";
 
 const loanTypeColors: Record<string, string> = {
   personal: "bg-chart-1 text-white",
@@ -20,6 +21,7 @@ const loanTypeColors: Record<string, string> = {
 };
 
 export default function Loans() {
+  const { symbol } = useCurrency();
   const [loanDialogOpen, setLoanDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
@@ -87,8 +89,8 @@ export default function Loans() {
     },
   });
 
-  const totalLoans = loans.reduce((sum, loan) => sum + parseFloat(loan.totalAmount), 0);
-  const totalPaid = loans.reduce((sum, loan) => sum + parseFloat(loan.paidAmount), 0);
+  const totalLoans = loans.reduce((sum, loan) => sum + Number(loan.totalAmount), 0);
+  const totalPaid = loans.reduce((sum, loan) => sum + Number(loan.paidAmount), 0);
   const totalRemaining = totalLoans - totalPaid;
 
   const handleAddPayment = (loan: Loan) => {
@@ -97,10 +99,18 @@ export default function Loans() {
   };
 
   const handleSaveLoan = (loan: any) => {
+    // Convert amount fields to numbers
+    const loanData = {
+      ...loan,
+      totalAmount: parseFloat(loan.totalAmount),
+      paidAmount: parseFloat(loan.paidAmount),
+      interestRate: parseFloat(loan.interestRate),
+    };
+
     if (editingLoan) {
-      updateMutation.mutate({ id: editingLoan.id, data: loan });
+      updateMutation.mutate({ id: editingLoan.id, data: loanData });
     } else {
-      createMutation.mutate(loan);
+      createMutation.mutate(loanData);
     }
   };
 
@@ -148,19 +158,19 @@ export default function Loans() {
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Total Loans</p>
                   <p className="text-2xl font-bold" data-testid="text-total-loans">
-                    ${totalLoans.toLocaleString()}
+                    {symbol}{totalLoans.toLocaleString()}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Total Paid</p>
                   <p className="text-2xl font-bold text-chart-2" data-testid="text-total-paid">
-                    ${totalPaid.toLocaleString()}
+                    {symbol}{totalPaid.toLocaleString()}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Remaining</p>
                   <p className="text-2xl font-bold text-chart-3" data-testid="text-total-remaining">
-                    ${totalRemaining.toLocaleString()}
+                    {symbol}{totalRemaining.toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -193,8 +203,8 @@ export default function Loans() {
       ) : loans.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {loans.map((loan) => {
-            const remaining = parseFloat(loan.totalAmount) - parseFloat(loan.paidAmount);
-            const percentage = (parseFloat(loan.paidAmount) / parseFloat(loan.totalAmount)) * 100;
+            const remaining = Number(loan.totalAmount) - Number(loan.paidAmount);
+            const percentage = (Number(loan.paidAmount) / Number(loan.totalAmount)) * 100;
             return (
               <Card key={loan.id}>
                 <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 pb-3">
@@ -206,7 +216,7 @@ export default function Loans() {
                       <Badge className={loanTypeColors[loan.type]} data-testid={`badge-loan-type-${loan.id}`}>
                         {loan.type}
                       </Badge>
-                      <span className="text-sm text-muted-foreground">{parseFloat(loan.interestRate).toFixed(2)}% APR</span>
+                      <span className="text-sm text-muted-foreground">{Number(loan.interestRate).toFixed(2)}% APR</span>
                     </div>
                   </div>
                   <div className="flex gap-1">
@@ -235,14 +245,14 @@ export default function Loans() {
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Paid</span>
                       <span className="font-semibold" data-testid={`text-loan-paid-${loan.id}`}>
-                        ${parseFloat(loan.paidAmount).toLocaleString()}
+                        {symbol}{Number(loan.paidAmount).toLocaleString()}
                       </span>
                     </div>
                     <Progress value={Math.min(percentage, 100)} className="bg-chart-2" />
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Remaining</span>
                       <span className="font-semibold" data-testid={`text-loan-remaining-${loan.id}`}>
-                        ${remaining.toLocaleString()}
+                        {symbol}{remaining.toLocaleString()}
                       </span>
                     </div>
                   </div>

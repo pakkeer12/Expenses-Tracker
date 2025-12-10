@@ -16,6 +16,21 @@ import {
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
+// Helper functions for categories conversion
+const parseCategories = (categories: string | string[] | null | undefined): string[] => {
+  if (!categories) return ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education"];
+  if (Array.isArray(categories)) return categories;
+  if (typeof categories === 'string') return categories.split(',').filter(c => c.trim());
+  return ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education"];
+};
+
+const stringifyCategories = (categories: string[] | string | null | undefined): string => {
+  if (!categories) return "Food,Transport,Entertainment,Shopping,Bills,Healthcare,Education";
+  if (Array.isArray(categories)) return categories.join(',');
+  if (typeof categories === 'string') return categories;
+  return "Food,Transport,Entertainment,Shopping,Bills,Healthcare,Education";
+};
+
 const requireAuth = (req: Request, res: Response, next: NextFunction) => {
   if (!req.session.userId) {
     return res.status(401).json({ message: "Authentication required" });
@@ -50,7 +65,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       req.session.userId = user.id;
       const { password, ...userWithoutPassword } = user;
-      return res.status(201).json(userWithoutPassword);
+      // Convert categories string to array for the client
+      const userWithArrayCategories = {
+        ...userWithoutPassword,
+        categories: parseCategories(user.categories)
+      };
+      return res.status(201).json(userWithArrayCategories);
       
     } catch (error: any) {
       // Prevent sending multiple responses by using a single error handler
@@ -86,7 +106,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         req.session.userId = user.id;
         const { password: _, ...userWithoutPassword } = user;
-        res.json(userWithoutPassword);
+        // Convert categories string to array for the client
+        const userWithArrayCategories = {
+          ...userWithoutPassword,
+          categories: parseCategories(user.categories)
+        };
+        res.json(userWithArrayCategories);
       });
     } catch (error: any) {
       res.status(500).json({ message: error.message });
@@ -109,7 +134,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
       const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      // Convert categories string to array for the client
+      const userWithArrayCategories = {
+        ...userWithoutPassword,
+        categories: parseCategories(user.categories)
+      };
+      res.json(userWithArrayCategories);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -118,12 +148,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/auth/user", requireAuth, async (req, res) => {
     try {
       const parsed = updateUserSchema.parse(req.body);
-      const user = await storage.updateUser(req.session.userId!, parsed);
+      // Convert categories array to string for storage
+      const dataToUpdate = {
+        ...parsed,
+        categories: parsed.categories ? stringifyCategories(parsed.categories) : undefined
+      };
+      const user = await storage.updateUser(req.session.userId!, dataToUpdate as any);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
       const { password, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      // Convert categories string to array for the client
+      const userWithArrayCategories = {
+        ...userWithoutPassword,
+        categories: parseCategories(user.categories)
+      };
+      res.json(userWithArrayCategories);
     } catch (error: any) {
       if (error.name === "ZodError") {
         res.status(400).json({ message: fromZodError(error).message });
@@ -345,7 +385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update loan paidAmount
       const loan = await storage.getLoan(loanId);
       if (loan) {
-        const newPaidAmount = parseFloat(loan.paidAmount) + parseFloat(parsed.amount as any);
+        const newPaidAmount = Number(loan.paidAmount) + Number(parsed.amount);
         await storage.updateLoan(loanId, { paidAmount: newPaidAmount.toString() as any });
       }
       
@@ -380,10 +420,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (parsed.amount) {
         const loan = await storage.getLoan(existingPayment.loanId);
         if (loan) {
-          const oldAmount = parseFloat(existingPayment.amount);
-          const newAmount = parseFloat(parsed.amount as any);
+          const oldAmount = Number(existingPayment.amount);
+          const newAmount = Number(parsed.amount);
           const difference = newAmount - oldAmount;
-          const newPaidAmount = parseFloat(loan.paidAmount) + difference;
+          const newPaidAmount = Number(loan.paidAmount) + difference;
           await storage.updateLoan(existingPayment.loanId, { paidAmount: newPaidAmount.toString() as any });
         }
       }
@@ -417,7 +457,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update loan paidAmount
       const loan = await storage.getLoan(payment.loanId);
       if (loan) {
-        const newPaidAmount = parseFloat(loan.paidAmount) - parseFloat(payment.amount);
+        const newPaidAmount = Number(loan.paidAmount) - Number(payment.amount);
         await storage.updateLoan(payment.loanId, { paidAmount: Math.max(0, newPaidAmount).toString() as any });
       }
       
@@ -543,16 +583,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const expenses = await storage.getExpenses(req.session.userId!);
       const businessTransactions = await storage.getBusinessTransactions(req.session.userId!);
       
-      const totalExpenses = expenses.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+      const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
       
       // Calculate income from business transactions
       const totalIncome = businessTransactions
         .filter(t => t.type === 'income')
-        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        .reduce((sum, t) => sum + Number(t.amount), 0);
       
       const businessExpenses = businessTransactions
         .filter(t => t.type === 'expense')
-        .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        .reduce((sum, t) => sum + Number(t.amount), 0);
       
       const totalBalance = totalIncome - (totalExpenses + businessExpenses);
       const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
@@ -575,7 +615,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       expenses.forEach(exp => {
         const current = categoryMap.get(exp.category) || 0;
-        categoryMap.set(exp.category, current + parseFloat(exp.amount));
+        categoryMap.set(exp.category, current + Number(exp.amount));
       });
       
       const categoryData = Array.from(categoryMap.entries()).map(([name, value]) => ({
@@ -599,7 +639,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const date = new Date(exp.date);
         const monthKey = date.toLocaleString('en-US', { month: 'short' });
         const current = monthlyMap.get(monthKey) || 0;
-        monthlyMap.set(monthKey, current + parseFloat(exp.amount));
+        monthlyMap.set(monthKey, current + Number(exp.amount));
       });
       
       const monthlyData = Array.from(monthlyMap.entries()).map(([month, expenses]) => ({
