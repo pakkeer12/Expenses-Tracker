@@ -1,5 +1,13 @@
 # Backend Deployment Guide 🚀
 
+## Important: Session Persistence Update ✅
+
+This app now uses **SQLite for both database and sessions**, which means:
+- ✅ Sessions persist across server restarts
+- ✅ No more login issues when navigating pages
+- ✅ Simple single-file database deployment
+- ✅ Both `local.db` and `sessions.db` stored on persistent disk
+
 ## Option 1: Deploy to Render.com (Recommended - Free Tier Available)
 
 ### Prerequisites
@@ -13,7 +21,7 @@
 
 ```bash
 git add .
-git commit -m "Prepare for deployment"
+git commit -m "Prepare for deployment with SQLite session store"
 git push origin main
 ```
 
@@ -31,6 +39,8 @@ git push origin main
 4. Click "Apply"
 5. Wait for deployment (5-10 minutes)
 
+**The `render.yaml` includes persistent disk storage for both database files.**
+
 #### 4. Get Your Deployment URL
 
 Once deployed, you'll see:
@@ -45,16 +55,7 @@ Once deployed, you'll see:
 
 If the Blueprint doesn't work:
 
-#### 1. Create PostgreSQL Database
-
-1. In Render Dashboard: New + → PostgreSQL
-2. Name: `expenses-tracker-db`
-3. Plan: Free
-4. Region: Choose closest to you
-5. Click "Create Database"
-6. Copy the "Internal Database URL"
-
-#### 2. Create Web Service
+#### 1. Create Web Service (No PostgreSQL Needed!)
 
 1. In Render Dashboard: New + → Web Service
 2. Connect your GitHub repo
@@ -66,6 +67,19 @@ If the Blueprint doesn't work:
    - **Start Command:** `npm start`
    - **Plan:** Free
 
+#### 2. Add Persistent Disk
+
+In the Web Service settings:
+1. Go to "Disks" section
+2. Click "Add Disk"
+3. Configure:
+   - **Name:** `expenses-data`
+   - **Mount Path:** `/opt/render/project/src`
+   - **Size:** 1 GB (free tier)
+4. Save
+
+This disk will store both `local.db` and `sessions.db` files.
+
 #### 3. Add Environment Variables
 
 In the Web Service settings, add:
@@ -73,7 +87,6 @@ In the Web Service settings, add:
 | Key | Value |
 |-----|-------|
 | `NODE_ENV` | `production` |
-| `DATABASE_URL` | [Paste Internal Database URL from step 1] |
 | `SESSION_SECRET` | [Generate random string] |
 | `PORT` | `10000` |
 

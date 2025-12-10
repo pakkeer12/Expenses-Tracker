@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import SqliteStore from "better-sqlite3-session-store";
+import Database from "better-sqlite3";
+import path from "path";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { db } from "./db";
@@ -9,18 +11,27 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-const MemoryStore = createMemoryStore(session);
+// Create a separate database for sessions
+const sessionDbPath = process.env.NODE_ENV === "production" 
+  ? "/opt/render/project/src/sessions.db" 
+  : path.join(process.cwd(), "sessions.db");
+
+const SessionStore = SqliteStore(session);
 
 app.use(
   session({
-    store: new MemoryStore({
-      checkPeriod: 86400000, // prune expired entries every 24h
+    store: new SessionStore({
+      client: new Database(sessionDbPath),
+      expired: {
+        clear: true,
+        intervalMs: 900000 // 15 minutes
+      }
     }),
     secret: process.env.SESSION_SECRET || "expense-tracker-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      maxAge: 30 * 24 * 60 * 60 * 1000,
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",

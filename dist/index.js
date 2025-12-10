@@ -7,16 +7,16 @@ var __export = (target, all) => {
 // server/index.ts
 import express2 from "express";
 import session from "express-session";
-import createMemoryStore from "memorystore";
+import SqliteStore from "better-sqlite3-session-store";
+import Database2 from "better-sqlite3";
+import path4 from "path";
 
 // server/routes.ts
 import { createServer } from "http";
 
 // server/db.ts
-import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
-import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
-import postgres from "postgres";
 
 // shared/schema.ts
 var schema_exports = {};
@@ -160,20 +160,10 @@ import { fileURLToPath } from "url";
 dotenv.config();
 var __filename = fileURLToPath(import.meta.url);
 var __dirname = path.dirname(__filename);
-var DATABASE_URL = process.env.DATABASE_URL;
-var isProduction = process.env.NODE_ENV === "production";
-var db;
-var sqlite = null;
-if (DATABASE_URL) {
-  console.log("\u{1F418} Using PostgreSQL database");
-  const queryClient = postgres(DATABASE_URL);
-  db = drizzlePostgres(queryClient, { schema: schema_exports });
-} else {
-  console.log("\u{1F4BE} Using SQLite database (local.db)");
-  const dbPath = path.join(__dirname, "..", "local.db");
-  sqlite = new Database(dbPath);
-  db = drizzleSqlite(sqlite, { schema: schema_exports });
-}
+var dbPath = path.join(__dirname, "..", "local.db");
+console.log("\u{1F4BE} Using SQLite database:", dbPath);
+var sqlite = new Database(dbPath);
+var db = drizzle(sqlite, { schema: schema_exports });
 
 // server/storage.ts
 import { eq, desc } from "drizzle-orm";
@@ -990,18 +980,24 @@ function serveStatic(app2) {
 var app = express2();
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
-var MemoryStore = createMemoryStore(session);
+var sessionDbPath = process.env.NODE_ENV === "production" ? "/opt/render/project/src/sessions.db" : path4.join(process.cwd(), "sessions.db");
+var SessionStore = SqliteStore(session);
 app.use(
   session({
-    store: new MemoryStore({
-      checkPeriod: 864e5
-      // prune expired entries every 24h
+    store: new SessionStore({
+      client: new Database2(sessionDbPath),
+      expired: {
+        clear: true,
+        intervalMs: 9e5
+        // 15 minutes
+      }
     }),
     secret: process.env.SESSION_SECRET || "expense-tracker-secret-key-change-in-production",
     resave: false,
     saveUninitialized: false,
     cookie: {
       maxAge: 30 * 24 * 60 * 60 * 1e3,
+      // 30 days
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax"
@@ -1010,7 +1006,7 @@ app.use(
 );
 app.use((req, res, next) => {
   const start = Date.now();
-  const path4 = req.path;
+  const path5 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -1019,8 +1015,8 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path4.startsWith("/api")) {
-      let logLine = `${req.method} ${path4} ${res.statusCode} in ${duration}ms`;
+    if (path5.startsWith("/api")) {
+      let logLine = `${req.method} ${path5} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }

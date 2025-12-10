@@ -2,19 +2,30 @@
 
 ## Pre-Deployment
 
-- [x] Database configuration updated (SQLite + PostgreSQL support)
+- [x] Database configuration updated (SQLite only - simplified!)
+- [x] **Session persistence FIXED** (SQLite session store)
 - [x] Health check endpoint added
-- [x] Render.yaml created
+- [x] Render.yaml created with persistent disk
 - [x] .env.example created
+- [x] Amount type conversions fixed
+- [x] Currency symbols fixed
 - [ ] Code committed to GitHub
 - [ ] Code pushed to GitHub
+
+## What Was Fixed Today 🎉
+
+### Session Issue RESOLVED ✅
+- **Problem:** Users logged out when navigating pages in production
+- **Cause:** Using MemoryStore (sessions lost on restart)
+- **Solution:** SQLite session store (persistent across restarts)
+- **Result:** Sessions now persist for 30 days!
 
 ## Deployment Steps
 
 ### 1. Push to GitHub
 ```bash
 git add .
-git commit -m "Prepare backend for production deployment"
+git commit -m "Fix: Add persistent SQLite session store for production"
 git push origin main
 ```
 

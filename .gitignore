@@ -54,3 +54,11 @@ ios/App/App.xcworkspace/xcshareddata/
 
 # Capacitor
 .capacitor/
+
+# Database files
+local.db
+local.db-shm
+local.db-wal
+sessions.db
+sessions.db-shm
+sessions.db-wal
