@@ -1,5 +1,7 @@
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { drizzle as drizzleSqlite } from 'drizzle-orm/better-sqlite3';
+import { drizzle as drizzlePostgres } from 'drizzle-orm/postgres-js';
 import Database from 'better-sqlite3';
+import postgres from 'postgres';
 import * as schema from "@shared/schema";
 import dotenv from 'dotenv';
 import path from 'path';
@@ -12,8 +14,25 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Create SQLite database file in the project root
-const dbPath = path.join(__dirname, '..', 'local.db');
+// Determine if we're using PostgreSQL or SQLite
+const DATABASE_URL = process.env.DATABASE_URL;
+const isProduction = process.env.NODE_ENV === 'production';
 
-export const sqlite = new Database(dbPath);
-export const db = drizzle(sqlite, { schema });
+let db: ReturnType<typeof drizzleSqlite> | ReturnType<typeof drizzlePostgres>;
+let sqlite: Database.Database | null = null;
+
+if (DATABASE_URL) {
+  // Use PostgreSQL for production (Render, Railway, etc.)
+  console.log('🐘 Using PostgreSQL database');
+  const queryClient = postgres(DATABASE_URL);
+  db = drizzlePostgres(queryClient, { schema });
+} else {
+  // Use SQLite for local development
+  console.log('💾 Using SQLite database (local.db)');
+  const dbPath = path.join(__dirname, '..', 'local.db');
+  sqlite = new Database(dbPath);
+  db = drizzleSqlite(sqlite, { schema });
+}
+
+export { db, sqlite };
+
