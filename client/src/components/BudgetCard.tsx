@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Edit, Trash2 } from "lucide-react";
+import { useCurrency } from "@/hooks/use-currency";
 
 interface BudgetCardProps {
   id: string;
@@ -16,6 +17,7 @@ export function BudgetCard({ id, category, spent, limit, onEdit, onDelete }: Bud
   const percentage = (spent / limit) * 100;
   const isOverBudget = percentage > 100;
   const isWarning = percentage > 70 && percentage <= 100;
+  const {symbol} = useCurrency();
 
   const getProgressColor = () => {
     if (isOverBudget) return "bg-chart-3";
@@ -54,7 +56,7 @@ export function BudgetCard({ id, category, spent, limit, onEdit, onDelete }: Bud
         <div className="flex items-center justify-between text-sm">
           <span className="text-muted-foreground">Spent</span>
           <span className="font-semibold" data-testid={`text-budget-spent-${id}`}>
-            ${spent.toFixed(2)}
+            {symbol} {spent.toFixed(2)}
           </span>
         </div>
         <Progress value={Math.min(percentage, 100)} className={getProgressColor()} />
@@ -68,12 +70,12 @@ export function BudgetCard({ id, category, spent, limit, onEdit, onDelete }: Bud
             {percentage.toFixed(0)}% used
           </span>
           <span className="text-muted-foreground" data-testid={`text-budget-limit-${id}`}>
-            ${limit.toFixed(2)} limit
+            {symbol} {limit.toFixed(2)} limit
           </span>
         </div>
         {isOverBudget && (
           <div className="text-xs text-chart-3 font-medium">
-            Over budget by ${(spent - limit).toFixed(2)}
+            Over budget by {symbol} {(spent - limit).toFixed(2)}
           </div>
         )}
       </CardContent>

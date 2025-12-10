@@ -21,8 +21,18 @@ import { TransactionReviewDialog } from "@/components/TransactionReviewDialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { BusinessTransaction, CustomField } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useBusinessTransactions, useCreateBusinessTransaction, useCustomFields, useDeleteBusinessTransaction, useUpdateBusinessTransaction } from "@/hooks/use-business-transactions";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCurrency } from "@/hooks/use-currency";
 
 export default function BusinessTransactions() {
+  const {user}= useAuth()
+  const { data: transactions = [], isLoading: transactionsLoading } = useBusinessTransactions();
+  const createBussinessTransaction = useCreateBusinessTransaction();
+  const updateBusinessTransaction = useUpdateBusinessTransaction();
+  const deleteBusinessTransaction = useDeleteBusinessTransaction();
+  const {symbol} = useCurrency();
+
   const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
   const [customFieldDialogOpen, setCustomFieldDialogOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
@@ -36,70 +46,10 @@ export default function BusinessTransactions() {
   const [dateTo, setDateTo] = useState("");
   const { toast } = useToast();
 
-  const { data: transactions = [], isLoading: transactionsLoading } = useQuery<BusinessTransaction[]>({
-    queryKey: ["/api/business-transactions"],
-  });
 
-  const { data: customFields = [] } = useQuery<CustomField[]>({
-    queryKey: ["/api/custom-fields"],
-  });
 
-  const createTransactionMutation = useMutation({
-    mutationFn: (transaction: any) => apiRequest("/api/business-transactions", "POST", transaction),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
-      setTransactionDialogOpen(false);
-      toast({
-        title: "Transaction created",
-        description: "Your transaction has been created successfully.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create transaction",
-        variant: "destructive",
-      });
-    },
-  });
+  const { data: customFields = [] } = useCustomFields();
 
-  const updateTransactionMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      apiRequest(`/api/business-transactions/${id}`, "PUT", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
-      setEditingTransaction(null);
-      toast({
-        title: "Transaction updated",
-        description: "Your transaction has been updated successfully.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update transaction",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const deleteTransactionMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/business-transactions/${id}`, "DELETE"),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
-      toast({
-        title: "Transaction deleted",
-        description: "Your transaction has been deleted successfully.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete transaction",
-        variant: "destructive",
-      });
-    },
-  });
 
   const filteredTransactions = transactions.filter((transaction) => {
     const matchesSearch = searchQuery
@@ -152,12 +102,31 @@ export default function BusinessTransactions() {
     }
   };
 
-  const handleSaveTransaction = (transaction: any) => {
-    if (editingTransaction) {
-      updateTransactionMutation.mutate({ id: editingTransaction.id, data: transaction });
+  const handleSaveTransaction = async(transaction: any) => {
+    try{
+      if (editingTransaction) {
+      await updateBusinessTransaction.mutateAsync({ id: editingTransaction.id, data: transaction });
+      setEditingTransaction(null);
+      toast({
+        title: "Transaction updated",
+        description: "Your transaction has been updated successfully.",
+      });
     } else {
-      createTransactionMutation.mutate(transaction);
+      await createBussinessTransaction.mutateAsync(transaction);
+      setTransactionDialogOpen(false);
+      toast({
+        title: "Transaction created",
+        description: "Your transaction has been created successfully.",
+      });
     }
+    }catch(error:any){
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save transaction",
+        variant: "destructive",
+      });
+    }
+    
   };
 
   const handleEditTransaction = (id: string) => {
@@ -168,9 +137,21 @@ export default function BusinessTransactions() {
     }
   };
 
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async(id: string) => {
     if (confirm("Are you sure you want to delete this transaction?")) {
-      deleteTransactionMutation.mutate(id);
+      try {
+        await deleteBusinessTransaction.mutateAsync(id);
+        toast({
+        title: "Transaction deleted",
+        description: "Your transaction has been deleted successfully.",
+      });
+      } catch (error: any) {
+         toast({
+        title: "Error",
+        description: error.message || "Failed to delete transaction",
+        variant: "destructive",
+      });
+      }
     }
   };
 
@@ -234,7 +215,7 @@ export default function BusinessTransactions() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-chart-2" data-testid="text-total-income">
-              ${totalIncome.toLocaleString()}
+               {symbol} {totalIncome.toLocaleString()} 
             </div>
           </CardContent>
         </Card>
@@ -247,7 +228,7 @@ export default function BusinessTransactions() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-chart-3" data-testid="text-total-expenses">
-              ${totalExpense.toLocaleString()}
+               {symbol} {totalExpense.toLocaleString()} 
             </div>
           </CardContent>
         </Card>
@@ -265,7 +246,7 @@ export default function BusinessTransactions() {
               }`}
               data-testid="text-net-cash-flow"
             >
-              ${netCashFlow.toLocaleString()}
+               {symbol} {netCashFlow.toLocaleString()} 
             </div>
           </CardContent>
         </Card>
@@ -363,8 +344,8 @@ export default function BusinessTransactions() {
 
                     <div className="flex items-center gap-4 flex-wrap text-sm text-muted-foreground">
                       <span>Payment: {transaction.paymentMethod}</span>
-                      {transaction.customFields &&
-                        Object.entries(transaction.customFields as Record<string, any>).map(([key, value]) => (
+                      {transaction?.customFields as object &&
+                        (Object.entries(transaction?.customFields ?? {}) as [string, any][]).map(([key, value]) => (
                           <span key={key}>
                             {key}: <span className="font-medium">{String(value)}</span>
                           </span>
@@ -379,7 +360,7 @@ export default function BusinessTransactions() {
                       }`}
                       data-testid={`text-amount-${transaction.id}`}
                     >
-                      {transaction.type === "income" ? "+" : "-"}$
+                      {transaction.type === "income" ? "+" : "-"}{symbol}
                       {parseFloat(transaction.amount).toFixed(2)}
                     </span>
                     <div className="flex gap-1">

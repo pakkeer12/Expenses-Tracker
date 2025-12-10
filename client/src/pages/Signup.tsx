@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
-  const { signup } = useAuth();
+  const { signup, user } = useAuth();
   const { toast } = useToast();
   const [username, setUsername] = useState("");
   const [name, setName] = useState("");
@@ -44,7 +44,6 @@ export default function Signup() {
     
     try {
       await signup(username, password, name, email);
-      setLocation("/dashboard");
     } catch (error: any) {
       toast({
         title: "Signup failed",
@@ -55,6 +54,12 @@ export default function Signup() {
       setLoading(false);
     }
   };
+
+    useEffect(() => {
+      if (user) {
+        setLocation("/dashboard");
+      }
+    }, [user, setLocation]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">

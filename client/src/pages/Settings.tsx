@@ -15,16 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { currencies } from "@/hooks/use-currency";
 
-const currencies = [
-  { code: "USD", symbol: "$", name: "US Dollar" },
-  { code: "EUR", symbol: "€", name: "Euro" },
-  { code: "GBP", symbol: "£", name: "British Pound" },
-  { code: "JPY", symbol: "¥", name: "Japanese Yen" },
-  { code: "INR", symbol: "₹", name: "Indian Rupee" },
-  { code: "CAD", symbol: "C$", name: "Canadian Dollar" },
-  { code: "AUD", symbol: "A$", name: "Australian Dollar" },
-];
+
 
 const defaultCategories = ["Food", "Transport", "Entertainment", "Shopping", "Bills", "Healthcare", "Education"];
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,13 @@ import { Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
-  const [, setLocation] = useLocation();
-  const { login } = useAuth();
+  const [, setLocation] = useLocation();;
+  const { login, user } = useAuth();
   const { toast } = useToast();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,7 +23,6 @@ export default function Login() {
     
     try {
       await login(username, password);
-      setLocation("/dashboard");
     } catch (error: any) {
       toast({
         title: "Login failed",
@@ -33,6 +33,12 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (user) {
+      setLocation("/dashboard");
+    }
+  }, [user, setLocation]);
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">

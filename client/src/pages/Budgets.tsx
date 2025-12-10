@@ -10,76 +10,22 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Budget, Expense } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useBudgets, useCreateBudget, useDeleteBudget, useUpdateBudget } from "@/hooks/use-budgets";
+import { useExpenses } from "@/hooks/use-expenses";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCurrency } from "@/hooks/use-currency";
 
 export default function Budgets() {
+  const {symbol} = useCurrency();
+  const { data: budgets = [], isLoading: budgetsLoading } = useBudgets();
+  const { data: expenses = [] } = useExpenses();
+  const createMutation = useCreateBudget();
+  const updateMutation = useUpdateBudget();
+  const deleteMutation = useDeleteBudget();
+
   const [budgetDialogOpen, setBudgetDialogOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
   const { toast } = useToast();
-
-  const { data: budgets = [], isLoading: budgetsLoading } = useQuery<Budget[]>({
-    queryKey: ["/api/budgets"],
-  });
-
-  const { data: expenses = [] } = useQuery<Expense[]>({
-    queryKey: ["/api/expenses"],
-  });
-
-  const createMutation = useMutation({
-    mutationFn: (budget: any) => apiRequest("/api/budgets", "POST", budget),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets"] });
-      setBudgetDialogOpen(false);
-      toast({
-        title: "Budget created",
-        description: "Your budget has been created successfully.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create budget",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: any }) =>
-      apiRequest(`/api/budgets/${id}`, "PUT", data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets"] });
-      setEditingBudget(null);
-      toast({
-        title: "Budget updated",
-        description: "Your budget has been updated successfully.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to update budget",
-        variant: "destructive",
-      });
-    },
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiRequest(`/api/budgets/${id}`, "DELETE"),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budgets"] });
-      toast({
-        title: "Budget deleted",
-        description: "Your budget has been deleted successfully.",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete budget",
-        variant: "destructive",
-      });
-    },
-  });
 
   const calculateSpent = (category: string): number => {
     return expenses
@@ -97,12 +43,31 @@ export default function Budgets() {
   const totalLimit = budgetsWithSpent.reduce((sum, budget) => sum + budget.limit, 0);
   const totalPercentage = totalLimit > 0 ? (totalSpent / totalLimit) * 100 : 0;
 
-  const handleSave = (budget: any) => {
+  const handleSave = async (budget: any) => {
+    try {
     if (editingBudget) {
-      updateMutation.mutate({ id: editingBudget.id, data: budget });
+      await updateMutation.mutateAsync({ id: editingBudget.id, data: budget });
+      setEditingBudget(null);
+      toast({
+        title: "Budget updated",
+        description: "Your budget has been updated successfully.",
+      });
     } else {
-      createMutation.mutate(budget);
+      await createMutation.mutateAsync(budget);
+      setBudgetDialogOpen(false);
+      toast({
+        title: "Budget created",
+        description: "Your budget has been created successfully.",
+      });
+    }  
+    } catch (error: any) {
+       toast({
+        title: "Error",
+        description: error.message || "Failed to save budget",
+        variant: "destructive",
+      });
     }
+    
   };
 
   const handleEdit = (id: string) => {
@@ -113,9 +78,21 @@ export default function Budgets() {
     }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this budget?")) {
-      deleteMutation.mutate(id);
+    try {
+      await deleteMutation.mutateAsync(id);
+       toast({
+        title: "Budget deleted",
+        description: "Your budget has been deleted successfully.",
+      });
+    } catch (error: any) {
+       toast({
+        title: "Error",
+        description: error.message || "Failed to delete budget",
+        variant: "destructive",
+      });
+    }
     }
   };
 
@@ -152,10 +129,10 @@ export default function Budgets() {
                 </div>
                 <div className="text-right">
                   <p className="text-2xl font-bold" data-testid="text-total-spent">
-                    ${totalSpent.toFixed(2)}
+                    {symbol} {totalSpent.toFixed(2)}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    of ${totalLimit.toFixed(2)}
+                    of {symbol} {totalLimit.toFixed(2)}
                   </p>
                 </div>
               </div>

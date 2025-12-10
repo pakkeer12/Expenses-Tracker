@@ -40,19 +40,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         password: hashedPassword,
       });
 
-      req.session.regenerate((err) => {
-        if (err) {
-          return res.status(500).json({ message: "Session error" });
-        }
-        req.session.userId = user.id;
-        const { password, ...userWithoutPassword } = user;
-        res.status(201).json(userWithoutPassword);
+      // Use Promise to handle session regeneration
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
       });
+
+      req.session.userId = user.id;
+      const { password, ...userWithoutPassword } = user;
+      return res.status(201).json(userWithoutPassword);
+      
     } catch (error: any) {
+      // Prevent sending multiple responses by using a single error handler
       if (error.name === "ZodError") {
-        res.status(400).json({ message: fromZodError(error).message });
+        return res.status(400).json({ message: fromZodError(error).message });
       } else {
-        res.status(500).json({ message: error.message });
+        return res.status(500).json({ message: error.message || "Internal server error" });
       }
     }
   });
