@@ -7,9 +7,10 @@ interface StatCardProps {
   icon: LucideIcon;
   trend?: string;
   trendUp?: boolean;
+  valueColor?: string;
 }
 
-export function StatCard({ title, value, icon: Icon, trend, trendUp }: StatCardProps) {
+export function StatCard({ title, value, icon: Icon, trend, trendUp, valueColor }: StatCardProps) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
@@ -19,7 +20,7 @@ export function StatCard({ title, value, icon: Icon, trend, trendUp }: StatCardP
         <Icon className="h-4 w-4 text-muted-foreground" />
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold" data-testid={`text-${title.toLowerCase().replace(/\s+/g, '-')}-value`}>{value}</div>
+        <div className={`text-2xl font-bold ${valueColor || ''}`} data-testid={`text-${title.toLowerCase().replace(/\s+/g, '-')}-value`}>{value}</div>
         {trend && (
           <p
             className={`text-xs ${

@@ -1,7 +1,5 @@
 import {
   LayoutDashboard,
-  Receipt,
-  TrendingUp,
   Wallet,
   User,
   LogOut,
@@ -32,11 +30,6 @@ const menuItems = [
     icon: LayoutDashboard,
   },
   {
-    title: "Expenses",
-    url: "/expenses",
-    icon: Receipt,
-  },
-  {
     title: "Budgets",
     url: "/budgets",
     icon: Wallet,
@@ -50,11 +43,6 @@ const menuItems = [
     title: "Business",
     url: "/business",
     icon: Briefcase,
-  },
-  {
-    title: "Analytics",
-    url: "/analytics",
-    icon: TrendingUp,
   },
   {
     title: "Settings",
@@ -102,11 +90,9 @@ export function AppSidebar() {
                 const isActive = location === item.url;
                 return (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <a href={item.url} data-testid={`link-${item.title.toLowerCase()}`}>
-                        <item.icon className="h-5 w-5" />
-                        <span>{item.title}</span>
-                      </a>
+                    <SidebarMenuButton isActive={isActive} onClick={() => setLocation(item.url)} data-testid={`link-${item.title.toLowerCase()}`}>
+                      <item.icon className="h-5 w-5" />
+                      <span>{item.title}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

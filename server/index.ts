@@ -1,8 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
-import SqliteStore from "better-sqlite3-session-store";
-import Database from "better-sqlite3";
+import pgSession from "connect-pg-simple";
+import pg from "pg";
+import fs from "fs";
 import path from "path";
+import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { db } from "./db";
@@ -11,21 +13,63 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Create a separate database for sessions
-const sessionDbPath = process.env.NODE_ENV === "production" 
-  ? "/opt/render/project/src/sessions.db" 
-  : path.join(process.cwd(), "sessions.db");
+// PostgreSQL session store
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL environment variable is not set');
+}
 
-const SessionStore = SqliteStore(session);
+const pool = new pg.Pool({
+  connectionString: databaseUrl,
+});
+
+// Get the directory name in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Initialize database schema if it doesn't exist
+async function initializeDatabase() {
+  try {
+    // First, create the session table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "session" (
+        "sid" varchar NOT NULL,
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        PRIMARY KEY ("sid")
+      );
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+    `);
+    console.log('✅ Session table initialized');
+
+    // Then, read and execute the schema migration
+    const schemaPath = path.join(__dirname, '..', 'migrations', '0001_postgres_schema.sql');
+    if (fs.existsSync(schemaPath)) {
+      const schema = fs.readFileSync(schemaPath, 'utf-8');
+      // Execute the entire schema at once for better performance
+      await pool.query(schema);
+      console.log('✅ Database schema initialized');
+    }
+
+    // Also run the drop expenses table migration if it exists
+    const dropMigrationPath = path.join(__dirname, '..', 'migrations', '0002_drop_expenses_table.sql');
+    if (fs.existsSync(dropMigrationPath)) {
+      const dropMigration = fs.readFileSync(dropMigrationPath, 'utf-8');
+      await pool.query(dropMigration);
+      console.log('✅ Database migrations applied');
+    }
+  } catch (error) {
+    console.error('Failed to initialize database:', error);
+    // Don't throw - let the app continue, as the tables might already exist
+  }
+}
+
+const PostgresSessionStore = pgSession(session);
 
 app.use(
   session({
-    store: new SessionStore({
-      client: new Database(sessionDbPath),
-      expired: {
-        clear: true,
-        intervalMs: 900000 // 15 minutes
-      }
+    store: new PostgresSessionStore({
+      pool: pool,
     }),
     secret: process.env.SESSION_SECRET || "expense-tracker-secret-key-change-in-production",
     resave: false,
@@ -70,6 +114,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Wait for database to be ready before registering routes
+  await initializeDatabase();
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

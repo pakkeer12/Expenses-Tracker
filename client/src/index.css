@@ -208,7 +208,7 @@
 
 @layer base {
   * {
-    @apply border-border;
+    @apply border-[color:hsl(var(--border))];
   }
 
   body {

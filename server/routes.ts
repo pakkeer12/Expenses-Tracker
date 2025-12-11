@@ -7,7 +7,6 @@ import {
   insertUserSchema,
   updateUserSchema,
   updatePasswordSchema,
-  insertExpenseSchema,
   insertBudgetSchema,
   insertLoanSchema,
   insertLoanPaymentSchema,
@@ -206,61 +205,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         res.status(500).json({ message: error.message });
       }
-    }
-  });
-
-  // Expense routes
-  app.get("/api/expenses", requireAuth, async (req, res) => {
-    try {
-      const expenses = await storage.getExpenses(req.session.userId!);
-      res.json(expenses);
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-
-  app.post("/api/expenses", requireAuth, async (req, res) => {
-    try {
-      const parsed = insertExpenseSchema.parse({ ...req.body, userId: req.session.userId! });
-      const expense = await storage.createExpense(parsed);
-      res.status(201).json(expense);
-    } catch (error: any) {
-      if (error.name === "ZodError") {
-        res.status(400).json({ message: fromZodError(error).message });
-      } else {
-        res.status(500).json({ message: error.message });
-      }
-    }
-  });
-
-  app.put("/api/expenses/:id", requireAuth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const parsed = insertExpenseSchema.partial().parse(req.body);
-      const expense = await storage.updateExpense(id, parsed);
-      if (!expense) {
-        return res.status(404).json({ message: "Expense not found" });
-      }
-      res.json(expense);
-    } catch (error: any) {
-      if (error.name === "ZodError") {
-        res.status(400).json({ message: fromZodError(error).message });
-      } else {
-        res.status(500).json({ message: error.message });
-      }
-    }
-  });
-
-  app.delete("/api/expenses/:id", requireAuth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const deleted = await storage.deleteExpense(id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Expense not found" });
-      }
-      res.status(204).send();
-    } catch (error: any) {
-      res.status(500).json({ message: error.message });
     }
   });
 
@@ -589,21 +533,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard analytics routes
   app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
-      const expenses = await storage.getExpenses(req.session.userId!);
       const businessTransactions = await storage.getBusinessTransactions(req.session.userId!);
       
-      const totalExpenses = expenses.reduce((sum, exp) => sum + Number(exp.amount), 0);
-      
-      // Calculate income from business transactions
+      // Calculate income and expenses from business transactions
       const totalIncome = businessTransactions
         .filter(t => t.type === 'income')
         .reduce((sum, t) => sum + Number(t.amount), 0);
       
-      const businessExpenses = businessTransactions
+      const totalExpenses = businessTransactions
         .filter(t => t.type === 'expense')
         .reduce((sum, t) => sum + Number(t.amount), 0);
       
-      const totalBalance = totalIncome - (totalExpenses + businessExpenses);
+      const totalBalance = totalIncome - totalExpenses;
       const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
       
       res.json({
@@ -619,13 +560,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/category-breakdown", requireAuth, async (req, res) => {
     try {
-      const expenses = await storage.getExpenses(req.session.userId!);
+      const businessTransactions = await storage.getBusinessTransactions(req.session.userId!);
       const categoryMap = new Map<string, number>();
       
-      expenses.forEach(exp => {
-        const current = categoryMap.get(exp.category) || 0;
-        categoryMap.set(exp.category, current + Number(exp.amount));
-      });
+      businessTransactions
+        .filter(t => t.type === 'expense')
+        .forEach(t => {
+          const current = categoryMap.get(t.category) || 0;
+          categoryMap.set(t.category, current + Number(t.amount));
+        });
       
       const categoryData = Array.from(categoryMap.entries()).map(([name, value]) => ({
         name,
@@ -640,16 +583,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/dashboard/monthly-trend", requireAuth, async (req, res) => {
     try {
-      const expenses = await storage.getExpenses(req.session.userId!);
+      const businessTransactions = await storage.getBusinessTransactions(req.session.userId!);
       
       // Group expenses by month
       const monthlyMap = new Map<string, number>();
-      expenses.forEach(exp => {
-        const date = new Date(exp.date);
-        const monthKey = date.toLocaleString('en-US', { month: 'short' });
-        const current = monthlyMap.get(monthKey) || 0;
-        monthlyMap.set(monthKey, current + Number(exp.amount));
-      });
+      businessTransactions
+        .filter(t => t.type === 'expense')
+        .forEach(t => {
+          const date = new Date(t.date);
+          const monthKey = date.toLocaleString('en-US', { month: 'short' });
+          const current = monthlyMap.get(monthKey) || 0;
+          monthlyMap.set(monthKey, current + Number(t.amount));
+        });
       
       const monthlyData = Array.from(monthlyMap.entries()).map(([month, expenses]) => ({
         month,

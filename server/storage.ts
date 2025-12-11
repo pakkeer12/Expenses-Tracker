@@ -1,8 +1,7 @@
 import { db } from "./db";
 import { 
-  users, expenses, budgets, loans, loanPayments, businessTransactions, customFields,
+  users, budgets, loans, loanPayments, businessTransactions, customFields,
   type User, type InsertUser, type UpdateUser,
-  type Expense, type InsertExpense,
   type Budget, type InsertBudget,
   type Loan, type InsertLoan,
   type LoanPayment, type InsertLoanPayment,
@@ -18,13 +17,6 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, user: UpdateUser): Promise<User | undefined>;
   updateUserPassword(id: string, hashedPassword: string): Promise<boolean>;
-
-  // Expense methods
-  getExpenses(userId: string): Promise<Expense[]>;
-  getExpense(id: string): Promise<Expense | undefined>;
-  createExpense(expense: InsertExpense): Promise<Expense>;
-  updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense | undefined>;
-  deleteExpense(id: string): Promise<boolean>;
 
   // Budget methods
   getBudgets(userId: string): Promise<Budget[]>;
@@ -85,31 +77,6 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserPassword(id: string, hashedPassword: string): Promise<boolean> {
     const result = await db.update(users).set({ password: hashedPassword }).where(eq(users.id, id)).returning();
-    return result.length > 0;
-  }
-
-  // Expense methods
-  async getExpenses(userId: string): Promise<Expense[]> {
-    return await db.select().from(expenses).where(eq(expenses.userId, userId)).orderBy(desc(expenses.date));
-  }
-
-  async getExpense(id: string): Promise<Expense | undefined> {
-    const result = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
-    return result[0];
-  }
-
-  async createExpense(expense: InsertExpense): Promise<Expense> {
-    const result = await db.insert(expenses).values(expense).returning();
-    return result[0];
-  }
-
-  async updateExpense(id: string, expense: Partial<InsertExpense>): Promise<Expense | undefined> {
-    const result = await db.update(expenses).set(expense).where(eq(expenses.id, id)).returning();
-    return result[0];
-  }
-
-  async deleteExpense(id: string): Promise<boolean> {
-    const result = await db.delete(expenses).where(eq(expenses.id, id)).returning();
     return result.length > 0;
   }
 

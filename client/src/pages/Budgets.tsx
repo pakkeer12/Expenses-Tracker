@@ -11,14 +11,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Budget, Expense } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useBudgets, useCreateBudget, useDeleteBudget, useUpdateBudget } from "@/hooks/use-budgets";
-import { useExpenses } from "@/hooks/use-expenses";
+import { useBusinessTransactions } from "@/hooks/use-business-transactions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency } from "@/hooks/use-currency";
 
 export default function Budgets() {
   const {symbol} = useCurrency();
   const { data: budgets = [], isLoading: budgetsLoading } = useBudgets();
-  const { data: expenses = [] } = useExpenses();
+  const { data: transactions = [] } = useBusinessTransactions();
   const createMutation = useCreateBudget();
   const updateMutation = useUpdateBudget();
   const deleteMutation = useDeleteBudget();
@@ -28,9 +28,9 @@ export default function Budgets() {
   const { toast } = useToast();
 
   const calculateSpent = (category: string): number => {
-    return expenses
-      .filter((exp) => exp.category === category)
-      .reduce((sum, exp) => sum + Number(exp.amount), 0);
+    return transactions
+      .filter((t) => t.type === 'expense' && t.category === category)
+      .reduce((sum, t) => sum + Number(t.amount), 0);
   };
 
   const budgetsWithSpent = budgets.map((budget) => ({

@@ -51,19 +51,31 @@ export default function BusinessTransactions() {
   const { data: customFields = [] } = useCustomFields();
 
 
-  const filteredTransactions = transactions.filter((transaction) => {
-    const matchesSearch = searchQuery
-      ? transaction.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        transaction.category.toLowerCase().includes(searchQuery.toLowerCase())
-      : true;
+  const filteredTransactions = transactions
+    .filter((transaction) => {
+      const matchesSearch = searchQuery
+        ? transaction.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          transaction.category.toLowerCase().includes(searchQuery.toLowerCase())
+        : true;
 
-    const matchesType = typeFilter === "all" ? true : transaction.type === typeFilter;
+      const matchesType = typeFilter === "all" ? true : transaction.type === typeFilter;
 
-    const transactionDate = new Date(transaction.date);
-    const matchesDateFrom = dateFrom ? transactionDate >= new Date(dateFrom) : true;
-    const matchesDateTo = dateTo ? transactionDate <= new Date(dateTo) : true;
+      const transactionDate = new Date(transaction.date);
+      const matchesDateFrom = dateFrom ? transactionDate >= new Date(dateFrom) : true;
+      const matchesDateTo = dateTo ? transactionDate <= new Date(dateTo) : true;
 
-    return matchesSearch && matchesType && matchesDateFrom && matchesDateTo;
+      return matchesSearch && matchesType && matchesDateFrom && matchesDateTo;
+    })
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Calculate running balance for each transaction
+  const transactionsWithBalance = filteredTransactions.map((transaction, index) => {
+    let balance = 0;
+    for (let i = 0; i <= index; i++) {
+      const t = filteredTransactions[i];
+      balance += t.type === "income" ? Number(t.amount) : -Number(t.amount);
+    }
+    return { ...transaction, balance };
   });
 
   const totalIncome = filteredTransactions
@@ -333,7 +345,7 @@ export default function BusinessTransactions() {
         </div>
       ) : filteredTransactions.length > 0 ? (
         <div className="space-y-3">
-          {filteredTransactions.map((transaction) => (
+          {transactionsWithBalance.map((transaction) => (
             <Card key={transaction.id} className="hover-elevate">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -372,16 +384,21 @@ export default function BusinessTransactions() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-xl font-bold whitespace-nowrap ${
-                        transaction.type === "income" ? "text-chart-2" : "text-chart-3"
-                      }`}
-                      data-testid={`text-amount-${transaction.id}`}
-                    >
-                      {transaction.type === "income" ? "+" : "-"}{symbol}
-                      {Number(transaction.amount).toFixed(2)}
-                    </span>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <div
+                        className={`text-lg font-bold whitespace-nowrap ${
+                          transaction.type === "income" ? "text-green-600" : "text-red-600"
+                        }`}
+                        data-testid={`text-amount-${transaction.id}`}
+                      >
+                        {symbol}
+                        {Number(transaction.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        Balance: {symbol}{transaction.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
                     <div className="flex gap-1">
                       <Button
                         variant="ghost"

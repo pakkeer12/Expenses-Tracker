@@ -13,17 +13,6 @@ export const users = sqliteTable("users", {
   categories: text("categories").default("Food,Transport,Entertainment,Shopping,Bills,Healthcare,Education"),
 });
 
-export const expenses = sqliteTable("expenses", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  amount: real("amount").notNull(),
-  category: text("category").notNull(),
-  date: text("date").notNull(),
-  notes: text("notes"),
-  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
-});
-
 export const budgets = sqliteTable("budgets", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -97,11 +86,6 @@ export const updatePasswordSchema = z.object({
   newPassword: z.string().min(6, "Password must be at least 6 characters"),
 });
 
-export const insertExpenseSchema = createInsertSchema(expenses).omit({
-  id: true,
-  createdAt: true,
-});
-
 export const insertBudgetSchema = createInsertSchema(budgets).omit({
   id: true,
   createdAt: true,
@@ -134,9 +118,6 @@ export type User = Omit<typeof users.$inferSelect, 'categories'> & {
 };
 export type UpdateUser = z.infer<typeof updateUserSchema>;
 export type UpdatePassword = z.infer<typeof updatePasswordSchema>;
-
-export type InsertExpense = z.infer<typeof insertExpenseSchema>;
-export type Expense = typeof expenses.$inferSelect;
 
 export type InsertBudget = z.infer<typeof insertBudgetSchema>;
 export type Budget = typeof budgets.$inferSelect;

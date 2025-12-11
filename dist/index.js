@@ -7,16 +7,18 @@ var __export = (target, all) => {
 // server/index.ts
 import express2 from "express";
 import session from "express-session";
-import SqliteStore from "better-sqlite3-session-store";
-import Database2 from "better-sqlite3";
-import path4 from "path";
+import pgSession from "connect-pg-simple";
+import pg from "pg";
+import fs2 from "fs";
+import path3 from "path";
+import { fileURLToPath } from "url";
 
 // server/routes.ts
 import { createServer } from "http";
 
 // server/db.ts
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import Database from "better-sqlite3";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 
 // shared/schema.ts
 var schema_exports = {};
@@ -24,11 +26,9 @@ __export(schema_exports, {
   budgets: () => budgets,
   businessTransactions: () => businessTransactions,
   customFields: () => customFields,
-  expenses: () => expenses,
   insertBudgetSchema: () => insertBudgetSchema,
   insertBusinessTransactionSchema: () => insertBusinessTransactionSchema,
   insertCustomFieldSchema: () => insertCustomFieldSchema,
-  insertExpenseSchema: () => insertExpenseSchema,
   insertLoanPaymentSchema: () => insertLoanPaymentSchema,
   insertLoanSchema: () => insertLoanSchema,
   insertUserSchema: () => insertUserSchema,
@@ -49,16 +49,6 @@ var users = sqliteTable("users", {
   email: text("email"),
   currency: text("currency").default("USD"),
   categories: text("categories").default("Food,Transport,Entertainment,Shopping,Bills,Healthcare,Education")
-});
-var expenses = sqliteTable("expenses", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  title: text("title").notNull(),
-  amount: real("amount").notNull(),
-  category: text("category").notNull(),
-  date: text("date").notNull(),
-  notes: text("notes"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => /* @__PURE__ */ new Date()).notNull()
 });
 var budgets = sqliteTable("budgets", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -128,10 +118,6 @@ var updatePasswordSchema = z.object({
   currentPassword: z.string(),
   newPassword: z.string().min(6, "Password must be at least 6 characters")
 });
-var insertExpenseSchema = createInsertSchema(expenses).omit({
-  id: true,
-  createdAt: true
-});
 var insertBudgetSchema = createInsertSchema(budgets).omit({
   id: true,
   createdAt: true
@@ -155,15 +141,14 @@ var insertCustomFieldSchema = createInsertSchema(customFields).omit({
 
 // server/db.ts
 import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
 dotenv.config();
-var __filename = fileURLToPath(import.meta.url);
-var __dirname = path.dirname(__filename);
-var dbPath = path.join(__dirname, "..", "local.db");
-console.log("\u{1F4BE} Using SQLite database:", dbPath);
-var sqlite = new Database(dbPath);
-var db = drizzle(sqlite, { schema: schema_exports });
+var databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
+console.log("\u{1F4BE} Connecting to PostgreSQL database");
+var client = postgres(databaseUrl);
+var db = drizzle(client, { schema: schema_exports });
 
 // server/storage.ts
 import { eq, desc } from "drizzle-orm";
@@ -187,26 +172,6 @@ var DatabaseStorage = class {
   }
   async updateUserPassword(id, hashedPassword) {
     const result = await db.update(users).set({ password: hashedPassword }).where(eq(users.id, id)).returning();
-    return result.length > 0;
-  }
-  // Expense methods
-  async getExpenses(userId) {
-    return await db.select().from(expenses).where(eq(expenses.userId, userId)).orderBy(desc(expenses.date));
-  }
-  async getExpense(id) {
-    const result = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
-    return result[0];
-  }
-  async createExpense(expense) {
-    const result = await db.insert(expenses).values(expense).returning();
-    return result[0];
-  }
-  async updateExpense(id, expense) {
-    const result = await db.update(expenses).set(expense).where(eq(expenses.id, id)).returning();
-    return result[0];
-  }
-  async deleteExpense(id) {
-    const result = await db.delete(expenses).where(eq(expenses.id, id)).returning();
     return result.length > 0;
   }
   // Budget methods
@@ -472,56 +437,6 @@ async function registerRoutes(app2) {
       } else {
         res.status(500).json({ message: error.message });
       }
-    }
-  });
-  app2.get("/api/expenses", requireAuth, async (req, res) => {
-    try {
-      const expenses2 = await storage.getExpenses(req.session.userId);
-      res.json(expenses2);
-    } catch (error) {
-      res.status(500).json({ message: error.message });
-    }
-  });
-  app2.post("/api/expenses", requireAuth, async (req, res) => {
-    try {
-      const parsed = insertExpenseSchema.parse({ ...req.body, userId: req.session.userId });
-      const expense = await storage.createExpense(parsed);
-      res.status(201).json(expense);
-    } catch (error) {
-      if (error.name === "ZodError") {
-        res.status(400).json({ message: fromZodError(error).message });
-      } else {
-        res.status(500).json({ message: error.message });
-      }
-    }
-  });
-  app2.put("/api/expenses/:id", requireAuth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const parsed = insertExpenseSchema.partial().parse(req.body);
-      const expense = await storage.updateExpense(id, parsed);
-      if (!expense) {
-        return res.status(404).json({ message: "Expense not found" });
-      }
-      res.json(expense);
-    } catch (error) {
-      if (error.name === "ZodError") {
-        res.status(400).json({ message: fromZodError(error).message });
-      } else {
-        res.status(500).json({ message: error.message });
-      }
-    }
-  });
-  app2.delete("/api/expenses/:id", requireAuth, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const deleted = await storage.deleteExpense(id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Expense not found" });
-      }
-      res.status(204).send();
-    } catch (error) {
-      res.status(500).json({ message: error.message });
     }
   });
   app2.get("/api/budgets", requireAuth, async (req, res) => {
@@ -805,12 +720,10 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
-      const expenses2 = await storage.getExpenses(req.session.userId);
       const businessTransactions2 = await storage.getBusinessTransactions(req.session.userId);
-      const totalExpenses = expenses2.reduce((sum, exp) => sum + Number(exp.amount), 0);
       const totalIncome = businessTransactions2.filter((t) => t.type === "income").reduce((sum, t) => sum + Number(t.amount), 0);
-      const businessExpenses = businessTransactions2.filter((t) => t.type === "expense").reduce((sum, t) => sum + Number(t.amount), 0);
-      const totalBalance = totalIncome - (totalExpenses + businessExpenses);
+      const totalExpenses = businessTransactions2.filter((t) => t.type === "expense").reduce((sum, t) => sum + Number(t.amount), 0);
+      const totalBalance = totalIncome - totalExpenses;
       const savingsRate = totalIncome > 0 ? (totalIncome - totalExpenses) / totalIncome * 100 : 0;
       res.json({
         totalBalance,
@@ -824,11 +737,11 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/dashboard/category-breakdown", requireAuth, async (req, res) => {
     try {
-      const expenses2 = await storage.getExpenses(req.session.userId);
+      const businessTransactions2 = await storage.getBusinessTransactions(req.session.userId);
       const categoryMap = /* @__PURE__ */ new Map();
-      expenses2.forEach((exp) => {
-        const current = categoryMap.get(exp.category) || 0;
-        categoryMap.set(exp.category, current + Number(exp.amount));
+      businessTransactions2.filter((t) => t.type === "expense").forEach((t) => {
+        const current = categoryMap.get(t.category) || 0;
+        categoryMap.set(t.category, current + Number(t.amount));
       });
       const categoryData = Array.from(categoryMap.entries()).map(([name, value]) => ({
         name,
@@ -841,17 +754,17 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/dashboard/monthly-trend", requireAuth, async (req, res) => {
     try {
-      const expenses2 = await storage.getExpenses(req.session.userId);
+      const businessTransactions2 = await storage.getBusinessTransactions(req.session.userId);
       const monthlyMap = /* @__PURE__ */ new Map();
-      expenses2.forEach((exp) => {
-        const date = new Date(exp.date);
+      businessTransactions2.filter((t) => t.type === "expense").forEach((t) => {
+        const date = new Date(t.date);
         const monthKey = date.toLocaleString("en-US", { month: "short" });
         const current = monthlyMap.get(monthKey) || 0;
-        monthlyMap.set(monthKey, current + Number(exp.amount));
+        monthlyMap.set(monthKey, current + Number(t.amount));
       });
-      const monthlyData = Array.from(monthlyMap.entries()).map(([month, expenses3]) => ({
+      const monthlyData = Array.from(monthlyMap.entries()).map(([month, expenses]) => ({
         month,
-        expenses: expenses3
+        expenses
       }));
       res.json(monthlyData);
     } catch (error) {
@@ -865,13 +778,13 @@ async function registerRoutes(app2) {
 // server/vite.ts
 import express from "express";
 import fs from "fs";
-import path3 from "path";
+import path2 from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 
 // vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path2 from "path";
+import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 var vite_config_default = defineConfig({
   plugins: [
@@ -888,14 +801,14 @@ var vite_config_default = defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path2.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path2.resolve(import.meta.dirname, "shared"),
-      "@assets": path2.resolve(import.meta.dirname, "attached_assets")
+      "@": path.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path.resolve(import.meta.dirname, "shared"),
+      "@assets": path.resolve(import.meta.dirname, "attached_assets")
     }
   },
-  root: path2.resolve(import.meta.dirname, "client"),
+  root: path.resolve(import.meta.dirname, "client"),
   build: {
-    outDir: path2.resolve(import.meta.dirname, "dist/public"),
+    outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true
   },
   server: {
@@ -944,7 +857,7 @@ async function setupVite(app2, server) {
   app2.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path3.resolve(
+      const clientTemplate = path2.resolve(
         import.meta.dirname,
         "..",
         "client",
@@ -964,7 +877,7 @@ async function setupVite(app2, server) {
   });
 }
 function serveStatic(app2) {
-  const distPath = path3.resolve(import.meta.dirname, "public");
+  const distPath = path2.resolve(import.meta.dirname, "public");
   if (!fs.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -972,7 +885,7 @@ function serveStatic(app2) {
   }
   app2.use(express.static(distPath));
   app2.use("*", (_req, res) => {
-    res.sendFile(path3.resolve(distPath, "index.html"));
+    res.sendFile(path2.resolve(distPath, "index.html"));
   });
 }
 
@@ -980,17 +893,48 @@ function serveStatic(app2) {
 var app = express2();
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
-var sessionDbPath = process.env.NODE_ENV === "production" ? "/opt/render/project/src/sessions.db" : path4.join(process.cwd(), "sessions.db");
-var SessionStore = SqliteStore(session);
+var databaseUrl2 = process.env.DATABASE_URL;
+if (!databaseUrl2) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
+var pool = new pg.Pool({
+  connectionString: databaseUrl2
+});
+var __filename = fileURLToPath(import.meta.url);
+var __dirname = path3.dirname(__filename);
+async function initializeDatabase() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "session" (
+        "sid" varchar NOT NULL,
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        PRIMARY KEY ("sid")
+      );
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+    `);
+    console.log("\u2705 Session table initialized");
+    const schemaPath = path3.join(__dirname, "..", "migrations", "0001_postgres_schema.sql");
+    if (fs2.existsSync(schemaPath)) {
+      const schema = fs2.readFileSync(schemaPath, "utf-8");
+      await pool.query(schema);
+      console.log("\u2705 Database schema initialized");
+    }
+    const dropMigrationPath = path3.join(__dirname, "..", "migrations", "0002_drop_expenses_table.sql");
+    if (fs2.existsSync(dropMigrationPath)) {
+      const dropMigration = fs2.readFileSync(dropMigrationPath, "utf-8");
+      await pool.query(dropMigration);
+      console.log("\u2705 Database migrations applied");
+    }
+  } catch (error) {
+    console.error("Failed to initialize database:", error);
+  }
+}
+var PostgresSessionStore = pgSession(session);
 app.use(
   session({
-    store: new SessionStore({
-      client: new Database2(sessionDbPath),
-      expired: {
-        clear: true,
-        intervalMs: 9e5
-        // 15 minutes
-      }
+    store: new PostgresSessionStore({
+      pool
     }),
     secret: process.env.SESSION_SECRET || "expense-tracker-secret-key-change-in-production",
     resave: false,
@@ -1006,7 +950,7 @@ app.use(
 );
 app.use((req, res, next) => {
   const start = Date.now();
-  const path5 = req.path;
+  const path4 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -1015,8 +959,8 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path5.startsWith("/api")) {
-      let logLine = `${req.method} ${path5} ${res.statusCode} in ${duration}ms`;
+    if (path4.startsWith("/api")) {
+      let logLine = `${req.method} ${path4} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -1029,6 +973,7 @@ app.use((req, res, next) => {
   next();
 });
 (async () => {
+  await initializeDatabase();
   const server = await registerRoutes(app);
   app.use((err, _req, res, _next) => {
     const status = err.status || err.statusCode || 500;

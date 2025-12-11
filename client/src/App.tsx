@@ -13,11 +13,9 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
 import Dashboard from "@/pages/Dashboard";
-import Expenses from "@/pages/Expenses";
 import Budgets from "@/pages/Budgets";
 import Loans from "@/pages/Loans";
 import BusinessTransactions from "@/pages/BusinessTransactions";
-import Analytics from "@/pages/Analytics";
 import Settings from "@/pages/Settings";
 import Profile from "@/pages/Profile";
 import NotFound from "@/pages/not-found";
@@ -47,69 +45,33 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function AuthenticatedRouter() {
+  return (
+    <Switch>
+      <Route path="/dashboard" component={Dashboard} />
+      <Route path="/budgets" component={Budgets} />
+      <Route path="/loans" component={Loans} />
+      <Route path="/business" component={BusinessTransactions} />
+      <Route path="/settings" component={Settings} />
+      <Route path="/profile" component={Profile} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={() => <Redirect to="/dashboard" />} />
       <Route path="/login" component={Login} />
       <Route path="/signup" component={Signup} />
-      <Route path="/dashboard">
+      <Route>
         <ProtectedRoute>
           <AuthenticatedLayout>
-            <Dashboard />
+            <AuthenticatedRouter />
           </AuthenticatedLayout>
         </ProtectedRoute>
       </Route>
-      <Route path="/expenses">
-        <ProtectedRoute>
-          <AuthenticatedLayout>
-            <Expenses />
-          </AuthenticatedLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/budgets">
-        <ProtectedRoute>
-          <AuthenticatedLayout>
-            <Budgets />
-          </AuthenticatedLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/loans">
-        <ProtectedRoute>
-          <AuthenticatedLayout>
-            <Loans />
-          </AuthenticatedLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/business">
-        <ProtectedRoute>
-          <AuthenticatedLayout>
-            <BusinessTransactions />
-          </AuthenticatedLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/analytics">
-        <ProtectedRoute>
-          <AuthenticatedLayout>
-            <Analytics />
-          </AuthenticatedLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/settings">
-        <ProtectedRoute>
-          <AuthenticatedLayout>
-            <Settings />
-          </AuthenticatedLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route path="/profile">
-        <ProtectedRoute>
-          <AuthenticatedLayout>
-            <Profile />
-          </AuthenticatedLayout>
-        </ProtectedRoute>
-      </Route>
-      <Route component={NotFound} />
     </Switch>
   );
 }
