@@ -4,7 +4,7 @@ services:
     name: expenses-tracker-api
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build && npm run db:push
+    buildCommand: npm ci && npm run build && npm run db:push
     startCommand: npm start
     envVars:
       - key: NODE_ENV
