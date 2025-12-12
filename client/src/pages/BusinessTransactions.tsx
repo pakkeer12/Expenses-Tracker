@@ -50,8 +50,23 @@ export default function BusinessTransactions() {
 
   const { data: customFields = [] } = useCustomFields();
 
+  // Sort all transactions by date ascending (oldest first) to calculate running balance
+  const sortedByDateAscending = [...transactions].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  const filteredTransactions = transactions
+  // Calculate balance AFTER each transaction
+  const transactionsWithBalance = sortedByDateAscending.map((transaction, index) => {
+    let balance = 0;
+    // Calculate balance AFTER this transaction (sum of all transactions up to and including current)
+    for (let i = 0; i <= index; i++) {
+      const t = sortedByDateAscending[i];
+      balance += t.type === "income" ? Number(t.amount) : -Number(t.amount);
+    }
+    return { ...transaction, balance };
+  });
+
+  // Now sort for display (newest first)
+  const filteredTransactions = transactionsWithBalance
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .filter((transaction) => {
       const matchesSearch = searchQuery
         ? transaction.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -65,18 +80,7 @@ export default function BusinessTransactions() {
       const matchesDateTo = dateTo ? transactionDate <= new Date(dateTo) : true;
 
       return matchesSearch && matchesType && matchesDateFrom && matchesDateTo;
-    })
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-  // Calculate running balance for each transaction
-  const transactionsWithBalance = filteredTransactions.map((transaction, index) => {
-    let balance = 0;
-    for (let i = 0; i <= index; i++) {
-      const t = filteredTransactions[i];
-      balance += t.type === "income" ? Number(t.amount) : -Number(t.amount);
-    }
-    return { ...transaction, balance };
-  });
+    });
 
   const totalIncome = filteredTransactions
     .filter((t) => t.type === "income")
@@ -109,7 +113,12 @@ export default function BusinessTransactions() {
         };
         await apiRequest("/api/business-transactions", "POST", transactionData);
       }
+      // Invalidate all Dashboard queries
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/category-breakdown"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/monthly-trend"] });
       queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/budgets"] });
       setReviewDialogOpen(false);
       toast({
         title: "Transactions imported",
@@ -150,6 +159,12 @@ export default function BusinessTransactions() {
         description: "Your transaction has been created successfully.",
       });
     }
+    // Invalidate all Dashboard queries
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard/category-breakdown"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard/monthly-trend"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/business-transactions"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/budgets"] });
     }catch(error:any){
       toast({
         title: "Error",

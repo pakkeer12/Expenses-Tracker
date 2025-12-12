@@ -6,6 +6,7 @@ var __export = (target, all) => {
 
 // server/index.ts
 import express2 from "express";
+import cors from "cors";
 import session from "express-session";
 import pgSession from "connect-pg-simple";
 import pg from "pg";
@@ -891,6 +892,14 @@ function serveStatic(app2) {
 
 // server/index.ts
 var app = express2();
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || true,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  })
+);
 app.use(express2.json());
 app.use(express2.urlencoded({ extended: false }));
 var databaseUrl2 = process.env.DATABASE_URL;
@@ -944,7 +953,8 @@ app.use(
       // 30 days
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax"
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      domain: process.env.COOKIE_DOMAIN
     }
   })
 );

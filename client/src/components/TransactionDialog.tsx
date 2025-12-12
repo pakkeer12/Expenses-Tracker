@@ -46,6 +46,7 @@ export function TransactionDialog({
   
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split("T")[0],
+    time: new Date().toTimeString().slice(0, 5),
     type: "income",
     amount: "",
     category: "",
@@ -64,8 +65,16 @@ export function TransactionDialog({
 
   useEffect(() => {
     if (transaction) {
+      // Parse date and time from transaction.date (ISO format: YYYY-MM-DDTHH:mm:ss or YYYY-MM-DD)
+      const dateTimeParts = transaction.date.includes('T') 
+        ? transaction.date.split('T')
+        : [transaction.date, '00:00'];
+      const datePart = dateTimeParts[0];
+      const timePart = dateTimeParts[1] ? dateTimeParts[1].slice(0, 5) : '00:00';
+      
       setFormData({
-        date: transaction.date,
+        date: datePart,
+        time: timePart,
         type: transaction.type,
         amount: transaction.amount.toString(),
         category: transaction.category,
@@ -179,7 +188,16 @@ export function TransactionDialog({
       return;
     }
 
-    onSave?.(formData);
+    // Combine date and time into ISO format
+    const dateTimeString = `${formData.date}T${formData.time}:00`;
+    const transactionData = {
+      ...formData,
+      date: dateTimeString,
+    };
+    // Remove time field from submission since it's now part of date
+    delete (transactionData as any).time;
+
+    onSave?.(transactionData);
     onOpenChange(false);
   };
 
@@ -217,6 +235,19 @@ export function TransactionDialog({
               )}
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="time">Time</Label>
+              <Input
+                id="time"
+                type="time"
+                value={formData.time}
+                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                data-testid="input-transaction-time"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="type">Type <span className="text-destructive">*</span></Label>
               <Select
