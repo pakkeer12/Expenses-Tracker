@@ -12,13 +12,14 @@ import { db } from "./db";
 
 const app = express();
 
-// CORS configuration with credentials support
+// CORS configuration - since FE is served by same server, keep it simple
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || true,
+    origin: true, // Allow all origins since they're same-origin
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 200,
   })
 );
 
@@ -90,8 +91,7 @@ app.use(
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      domain: process.env.COOKIE_DOMAIN,
+      sameSite: "lax", // Safe for same-origin deployment
     },
   })
 );
