@@ -894,10 +894,12 @@ function serveStatic(app2) {
 var app = express2();
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || true,
+    origin: true,
+    // Allow all origins since they're same-origin
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 200
   })
 );
 app.use(express2.json());
@@ -953,8 +955,8 @@ app.use(
       // 30 days
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      domain: process.env.COOKIE_DOMAIN
+      sameSite: "lax"
+      // Safe for same-origin deployment
     }
   })
 );
