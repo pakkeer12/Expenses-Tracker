@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { pgTable, text, integer, timestamp, uuid, numeric, doublePrecision, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = sqliteTable("users", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
   name: text("name"),
@@ -13,56 +13,68 @@ export const users = sqliteTable("users", {
   categories: text("categories").default("Food,Transport,Entertainment,Shopping,Bills,Healthcare,Education"),
 });
 
-export const budgets = sqliteTable("budgets", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const budgets = pgTable("budgets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   category: text("category").notNull(),
-  limit: real("limit").notNull(),
-  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  limit: doublePrecision("limit").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const loans = sqliteTable("loans", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const loans = pgTable("loans", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  totalAmount: real("total_amount").notNull(),
-  paidAmount: real("paid_amount").notNull().default(0),
-  interestRate: real("interest_rate").notNull(),
-  dueDate: text("due_date").notNull(),
+  totalAmount: doublePrecision("total_amount").notNull(),
+  paidAmount: doublePrecision("paid_amount").notNull().default(0),
+  interestRate: doublePrecision("interest_rate").notNull(),
+  dueDate: text("due_date").notNull(), // final due date
   lender: text("lender").notNull(),
   type: text("type").notNull(), // personal, business, auto, mortgage
-  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  tenure: integer("tenure").notNull(), // in months
+  startDate: text("start_date").notNull(),
+  calculationMethod: text("calculation_method").notNull().default("reducing"), // reducing or flat
+  paymentFrequency: text("payment_frequency").notNull().default("monthly"), // monthly, quarterly, yearly
+  emiAmount: doublePrecision("emi_amount"), // calculated EMI amount
 });
 
-export const loanPayments = sqliteTable("loan_payments", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  loanId: text("loan_id").notNull().references(() => loans.id, { onDelete: "cascade" }),
-  amount: real("amount").notNull(),
+export const loanPayments = pgTable("loan_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  loanId: uuid("loan_id").notNull().references(() => loans.id, { onDelete: "cascade" }),
+  amount: doublePrecision("amount").notNull(),
   date: text("date").notNull(),
   notes: text("notes"),
-  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const businessTransactions = sqliteTable("business_transactions", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const businessTransactions = pgTable("business_transactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   date: text("date").notNull(),
   type: text("type").notNull(), // income or expense
-  amount: real("amount").notNull(),
+  amount: doublePrecision("amount").notNull(),
   category: text("category").notNull(),
   description: text("description").notNull(),
   paymentMethod: text("payment_method").notNull(),
-  customFields: text("custom_fields", { mode: 'json' }),
-  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  customFields: jsonb("custom_fields"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const customFields = sqliteTable("custom_fields", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+export const customFields = pgTable("custom_fields", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   type: text("type").notNull(), // text, number, date, select
-  options: text("options", { mode: 'json' }), // for select type
-  createdAt: integer("created_at", { mode: 'timestamp' }).$defaultFn(() => new Date()).notNull(),
+  options: jsonb("options"), // for select type
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Session table (managed by connect-pg-simple, don't include in migrations)
+export const session = pgTable("session", {
+  sid: text("sid").primaryKey(),
+  sess: jsonb("sess").notNull(),
+  expire: timestamp("expire").notNull(),
 });
 
 // Schemas for validation
@@ -94,6 +106,11 @@ export const insertBudgetSchema = createInsertSchema(budgets).omit({
 export const insertLoanSchema = createInsertSchema(loans).omit({
   id: true,
   createdAt: true,
+}).extend({
+  tenure: z.coerce.number().int().positive().default(12),
+  startDate: z.string().default(() => new Date().toISOString().split('T')[0]),
+  calculationMethod: z.enum(['reducing', 'flat']).default('reducing'),
+  paymentFrequency: z.enum(['monthly', 'quarterly', 'yearly']).default('monthly'),
 });
 
 export const insertLoanPaymentSchema = createInsertSchema(loanPayments).omit({

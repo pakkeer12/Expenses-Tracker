@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { calculateEMI } from "@shared/loanCalculations";
+import { useCurrency } from "@/hooks/use-currency";
 
 interface LoanDialogProps {
   open: boolean;
@@ -26,18 +28,28 @@ interface LoanDialogProps {
 }
 
 const loanTypes = ["personal", "business", "auto", "mortgage"];
+const paymentFrequencies = ["monthly", "quarterly", "yearly"];
+const calculationMethods = [
+  { value: "reducing", label: "Reducing Balance (EMI)" },
+  { value: "flat", label: "Flat Rate" },
+];
 
 export function LoanDialog({ open, onOpenChange, onSave, loan }: LoanDialogProps) {
   const { toast } = useToast();
+  const { symbol } = useCurrency();
   
   const [formData, setFormData] = useState({
     name: "",
     totalAmount: "",
     paidAmount: "0",
     interestRate: "",
+    tenure: "",
+    startDate: "",
     dueDate: "",
     lender: "",
     type: "",
+    calculationMethod: "reducing",
+    paymentFrequency: "monthly",
   });
 
   const [errors, setErrors] = useState({
@@ -50,6 +62,21 @@ export function LoanDialog({ open, onOpenChange, onSave, loan }: LoanDialogProps
     type: "",
   });
 
+  // Calculate EMI automatically
+  const calculatedEMI = useMemo(() => {
+    if (!formData.totalAmount || !formData.interestRate || !formData.tenure) return 0;
+    
+    const principal = parseFloat(formData.totalAmount) - parseFloat(formData.paidAmount || "0");
+    return calculateEMI({
+      totalAmount: parseFloat(formData.totalAmount),
+      paidAmount: parseFloat(formData.paidAmount || "0"),
+      interestRate: parseFloat(formData.interestRate),
+      tenure: parseInt(formData.tenure),
+      calculationMethod: formData.calculationMethod as any,
+      paymentFrequency: formData.paymentFrequency as any,
+    });
+  }, [formData.totalAmount, formData.paidAmount, formData.interestRate, formData.tenure, formData.calculationMethod, formData.paymentFrequency]);
+
   useEffect(() => {
     if (loan) {
       setFormData({
@@ -57,19 +84,28 @@ export function LoanDialog({ open, onOpenChange, onSave, loan }: LoanDialogProps
         totalAmount: loan.totalAmount.toString(),
         paidAmount: loan.paidAmount.toString(),
         interestRate: loan.interestRate.toString(),
+        tenure: loan.tenure?.toString() || "12",
+        startDate: loan.startDate || new Date().toISOString().split("T")[0],
         dueDate: loan.dueDate,
         lender: loan.lender,
         type: loan.type,
+        calculationMethod: loan.calculationMethod || "reducing",
+        paymentFrequency: loan.paymentFrequency || "monthly",
       });
     } else {
+      const today = new Date().toISOString().split("T")[0];
       setFormData({
         name: "",
         totalAmount: "",
         paidAmount: "0",
         interestRate: "",
+        tenure: "12",
+        startDate: today,
         dueDate: "",
         lender: "",
         type: "",
+        calculationMethod: "reducing",
+        paymentFrequency: "monthly",
       });
     }
     // Reset errors
@@ -311,6 +347,84 @@ export function LoanDialog({ open, onOpenChange, onSave, loan }: LoanDialogProps
               <p className="text-sm text-destructive">{errors.interestRate}</p>
             )}
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tenure">Loan Tenure (Months) <span className="text-destructive">*</span></Label>
+            <Input
+              id="tenure"
+              type="number"
+              step="1"
+              min="1"
+              placeholder="12"
+              value={formData.tenure}
+              onChange={(e) => setFormData({ ...formData, tenure: e.target.value })}
+              data-testid="input-loan-tenure"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="startDate">Start Date <span className="text-destructive">*</span></Label>
+            <Input
+              id="startDate"
+              type="date"
+              value={formData.startDate}
+              onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+              data-testid="input-loan-start-date"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="paymentFrequency">Payment Frequency</Label>
+            <Select
+              value={formData.paymentFrequency}
+              onValueChange={(value) => setFormData({ ...formData, paymentFrequency: value })}
+            >
+              <SelectTrigger data-testid="select-payment-frequency">
+                <SelectValue placeholder="Select frequency" />
+              </SelectTrigger>
+              <SelectContent>
+                {paymentFrequencies.map((freq) => (
+                  <SelectItem key={freq} value={freq}>
+                    {freq.charAt(0).toUpperCase() + freq.slice(1)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="calculationMethod">Calculation Method</Label>
+            <Select
+              value={formData.calculationMethod}
+              onValueChange={(value) => setFormData({ ...formData, calculationMethod: value })}
+            >
+              <SelectTrigger data-testid="select-calculation-method">
+                <SelectValue placeholder="Select method" />
+              </SelectTrigger>
+              <SelectContent>
+                {calculationMethods.map((method) => (
+                  <SelectItem key={method.value} value={method.value}>
+                    {method.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Reducing balance calculates interest on remaining principal. Flat rate calculates on original amount.
+            </p>
+          </div>
+
+          {calculatedEMI > 0 && (
+            <div className="p-4 bg-muted rounded-lg space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Calculated EMI</p>
+              <p className="text-2xl font-bold text-primary">
+                {symbol}{calculatedEMI.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Per {formData.paymentFrequency === 'monthly' ? 'month' : formData.paymentFrequency === 'quarterly' ? 'quarter' : 'year'}
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="lender">Lender <span className="text-destructive">*</span></Label>

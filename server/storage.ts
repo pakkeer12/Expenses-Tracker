@@ -116,7 +116,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createLoan(loan: InsertLoan): Promise<Loan> {
-    const result = await db.insert(loans).values(loan).returning();
+    console.log('💾 Inserting loan into database:', JSON.stringify(loan, null, 2));
+    // Explicitly remove id and createdAt fields to let database defaults work
+    const { id, createdAt, ...loanData } = loan as any;
+    console.log('💾 Loan data after removing id/createdAt:', JSON.stringify(loanData, null, 2));
+    const result = await db.insert(loans).values(loanData).returning();
+    console.log('✅ Loan created:', result[0]);
     return result[0];
   }
 

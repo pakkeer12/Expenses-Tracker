@@ -4,7 +4,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Edit, Trash2, DollarSign } from "lucide-react";
+import { Plus, Edit, Trash2, DollarSign, Calendar, TrendingUp, Activity } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { LoanDialog } from "@/components/LoanDialog";
 import { PaymentDialog } from "@/components/PaymentDialog";
@@ -12,6 +12,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Loan } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/use-currency";
+import { useEnrichedLoans, type EnrichedLoan } from "@/hooks/use-loan-analytics";
+import { LoanRecommendations } from "@/components/LoanRecommendations";
+import { UpcomingEMIPayments } from "@/components/UpcomingEMIPayments";
+import { LoanHealthDashboard } from "@/components/LoanHealthDashboard";
 
 const loanTypeColors: Record<string, string> = {
   personal: "bg-chart-1 text-white",
@@ -24,13 +28,11 @@ export default function Loans() {
   const { symbol } = useCurrency();
   const [loanDialogOpen, setLoanDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
-  const [selectedLoan, setSelectedLoan] = useState<Loan | null>(null);
+  const [editingLoan, setEditingLoan] = useState<EnrichedLoan | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<EnrichedLoan | null>(null);
   const { toast } = useToast();
 
-  const { data: loans = [], isLoading } = useQuery<Loan[]>({
-    queryKey: ["/api/loans"],
-  });
+  const { data: loans = [], isLoading } = useEnrichedLoans();
 
   const createMutation = useMutation({
     mutationFn: (loan: any) => apiRequest("/api/loans", "POST", loan),
@@ -93,7 +95,7 @@ export default function Loans() {
   const totalPaid = loans.reduce((sum, loan) => sum + Number(loan.paidAmount), 0);
   const totalRemaining = totalLoans - totalPaid;
 
-  const handleAddPayment = (loan: Loan) => {
+  const handleAddPayment = (loan: EnrichedLoan) => {
     setSelectedLoan(loan);
     setPaymentDialogOpen(true);
   };
@@ -105,6 +107,7 @@ export default function Loans() {
       totalAmount: parseFloat(loan.totalAmount),
       paidAmount: parseFloat(loan.paidAmount),
       interestRate: parseFloat(loan.interestRate),
+      tenure: parseInt(loan.tenure),
     };
 
     if (editingLoan) {
@@ -190,6 +193,15 @@ export default function Loans() {
         </CardContent>
       </Card>
 
+      {/* Analytics Dashboard */}
+      {!isLoading && loans.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <LoanRecommendations loans={loans} />
+          <UpcomingEMIPayments loans={loans} />
+          <LoanHealthDashboard loans={loans} />
+        </div>
+      )}
+
       {isLoading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2].map((i) => (
@@ -257,15 +269,72 @@ export default function Loans() {
                     </div>
                   </div>
 
-                  <div className="pt-2 space-y-2">
+                  {/* EMI Information */}
+                  {loan.emiAmount && (
+                    <div className="p-3 bg-chart-1/10 rounded-lg border border-chart-1/20">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <p className="text-xs text-muted-foreground">EMI Amount</p>
+                          <p className="text-lg font-bold text-chart-1">
+                            {symbol}{loan.emiAmount.toLocaleString()}
+                          </p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {loan.paymentFrequency} • {loan.remainingTenure} payments left
+                          </p>
+                        </div>
+                        <Activity className="h-8 w-8 text-chart-1/50" />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Health Status Badge */}
+                  {loan.healthStatus && (
+                    <div className="flex items-center gap-2">
+                      <Badge 
+                        variant={
+                          loan.healthStatus === 'ahead' ? 'default' :
+                          loan.healthStatus === 'behind' ? 'destructive' :
+                          'secondary'
+                        }
+                        className="text-xs"
+                      >
+                        {loan.healthStatus === 'ahead' && <TrendingUp className="h-3 w-3 mr-1" />}
+                        {loan.healthMessage}
+                      </Badge>
+                    </div>
+                  )}
+
+                  <div className="pt-2 space-y-2 border-t">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Lender</span>
                       <span className="font-medium">{loan.lender}</span>
                     </div>
+                    {loan.nextEMIDate && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          Next EMI
+                        </span>
+                        <span className="font-medium">
+                          {new Date(loan.nextEMIDate).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Due Date</span>
+                      <span className="text-muted-foreground">Final Due Date</span>
                       <span className="font-medium">{loan.dueDate}</span>
                     </div>
+                    {loan.totalInterest && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Interest Remaining</span>
+                        <span className="font-medium text-destructive">
+                          {symbol}{Math.round(loan.totalInterest).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <Button

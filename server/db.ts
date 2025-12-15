@@ -16,6 +16,6 @@ if (!databaseUrl) {
 console.log('💾 Connecting to PostgreSQL database');
 
 const client = postgres(databaseUrl);
-export const db = drizzle(client, { schema });
+export const db = drizzle(client, { schema, logger: true });
 
 

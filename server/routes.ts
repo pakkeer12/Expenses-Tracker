@@ -13,6 +13,20 @@ import {
   insertBusinessTransactionSchema,
   insertCustomFieldSchema,
 } from "@shared/schema";
+import {
+  calculateEMI,
+  calculateTotalInterest,
+  calculateNextEMIDate,
+  calculateRemainingTenure,
+  generateAmortizationSchedule,
+  getDebtAvalancheRecommendations,
+  getDebtSnowballRecommendations,
+  getHighInterestLoans,
+  calculateTotalInterestAllLoans,
+  getLoanHealthStatus,
+  getLoansNearPayoff,
+  type LoanDetails,
+} from "@shared/loanCalculations";
 import { fromZodError } from "zod-validation-error";
 
 // Helper functions for categories conversion
@@ -264,10 +278,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Loan routes
+  // IMPORTANT: Specific routes MUST come before parameterized routes (/:id)
+  
+  // Loan Analytics routes - MUST be before /:id routes
   app.get("/api/loans", requireAuth, async (req, res) => {
     try {
       const loans = await storage.getLoans(req.session.userId!);
-      res.json(loans);
+      // Enrich loans with calculated fields
+      const enrichedLoans = loans.map(loan => {
+        const loanDetails = loan as LoanDetails;
+        const emi = calculateEMI(loanDetails);
+        const totalInterest = calculateTotalInterest(loanDetails);
+        const nextEMIDate = calculateNextEMIDate(
+          loan.startDate,
+          loan.paymentFrequency as any,
+          loan.paidAmount,
+          emi
+        );
+        const remainingTenure = calculateRemainingTenure(loanDetails);
+        const healthStatus = getLoanHealthStatus(loanDetails);
+        
+        return {
+          ...loan,
+          emiAmount: emi,
+          totalInterest,
+          nextEMIDate,
+          remainingTenure,
+          healthStatus: healthStatus.status,
+          healthMessage: healthStatus.message,
+        };
+      });
+      res.json(enrichedLoans);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
@@ -275,10 +316,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/loans", requireAuth, async (req, res) => {
     try {
-      const parsed = insertLoanSchema.parse({ ...req.body, userId: req.session.userId! });
-      const loan = await storage.createLoan(parsed);
+      // Remove id and createdAt if they exist in the request body
+      const { id, createdAt, ...bodyWithoutId } = req.body;
+      console.log('📝 Request body:', req.body);
+      console.log('📝 Body without id:', bodyWithoutId);
+      const parsed = insertLoanSchema.parse({ ...bodyWithoutId, userId: req.session.userId! });
+      console.log('📝 Parsed loan data:', parsed);
+      // Calculate EMI before saving
+      const emi = calculateEMI(parsed as any);
+      const loanWithEMI = { ...parsed, emiAmount: emi };
+      console.log('📝 Loan with EMI:', loanWithEMI);
+      const loan = await storage.createLoan(loanWithEMI);
       res.status(201).json(loan);
     } catch (error: any) {
+      console.error('❌ Error creating loan:', error);
       if (error.name === "ZodError") {
         res.status(400).json({ message: fromZodError(error).message });
       } else {
@@ -287,14 +338,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/loans/analytics", requireAuth, async (req, res) => {
+    try {
+      const loans = await storage.getLoans(req.session.userId!);
+      const loanDetails = loans as LoanDetails[];
+      
+      const avalanche = getDebtAvalancheRecommendations(loanDetails);
+      const snowball = getDebtSnowballRecommendations(loanDetails);
+      const highInterest = getHighInterestLoans(loanDetails, 10);
+      const nearPayoff = getLoansNearPayoff(loanDetails, 3);
+      const totalInterest = calculateTotalInterestAllLoans(loanDetails);
+      
+      res.json({
+        avalanche,
+        snowball,
+        highInterest,
+        nearPayoff,
+        totalInterest,
+        totalLoans: loans.length,
+        activeLoans: loanDetails.filter(l => l.totalAmount > l.paidAmount).length,
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.put("/api/loans/:id", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const parsed = insertLoanSchema.partial().parse(req.body);
-      const loan = await storage.updateLoan(id, parsed);
-      if (!loan) {
+      
+      // Get existing loan to merge with updates
+      const existingLoan = await storage.getLoan(id);
+      if (!existingLoan) {
         return res.status(404).json({ message: "Loan not found" });
       }
+      
+      // Recalculate EMI if relevant fields changed
+      const mergedLoan = { ...existingLoan, ...parsed };
+      const emi = calculateEMI(mergedLoan as any);
+      const loanWithEMI = { ...parsed, emiAmount: emi };
+      
+      const loan = await storage.updateLoan(id, loanWithEMI);
       res.json(loan);
     } catch (error: any) {
       if (error.name === "ZodError") {
@@ -313,6 +398,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Loan not found" });
       }
       res.status(204).send();
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.get("/api/loans/:id/schedule", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const loan = await storage.getLoan(id);
+      if (!loan) {
+        return res.status(404).json({ message: "Loan not found" });
+      }
+      
+      const schedule = generateAmortizationSchedule(loan as LoanDetails);
+      res.json(schedule);
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
