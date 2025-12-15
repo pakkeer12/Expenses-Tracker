@@ -954,7 +954,7 @@ app.use(
       maxAge: 30 * 24 * 60 * 60 * 1e3,
       // 30 days
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: process.env.ENV_NODE === "prod",
       sameSite: "lax"
       // Safe for same-origin deployment
     }
